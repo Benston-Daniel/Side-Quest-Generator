@@ -1,0 +1,1869 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="description" content="UGH MUMBAI — Side Quest Edition. A CRT-styled trip planner and quest engine for exploring Mumbai.">
+    <title>UGH MUMBAI — Side Quest Edition</title>
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Tailwind Config -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'neon-green': '#00ff41',
+                        'neon-pink': '#ff0090',
+                        'neon-amber': '#ffb000',
+                        'arcade-dark': '#050510',
+                        'arcade-card': '#111111',
+                    },
+                    fontFamily: {
+                        'arcade': ['"Press Start 2P"', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- SortableJS (MUST load before Alpine) -->
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
+
+    <!-- Alpine.js (defer — loads last) -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.9/dist/cdn.min.js"></script>
+
+    <style>
+        /* ─── Base ─── */
+        body {
+            font-family: 'Press Start 2P', monospace;
+            background-color: #050510;
+            color: #00ff41;
+            overscroll-behavior-y: none;
+        }
+
+        [x-cloak] { display: none !important; }
+
+        /* ─── CRT Overlay ─── */
+        .crt-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            pointer-events: none;
+            z-index: 9999;
+            background: repeating-linear-gradient(
+                transparent 0px,
+                transparent 2px,
+                rgba(0,0,0,0.15) 2px,
+                rgba(0,0,0,0.15) 4px
+            );
+        }
+
+        /* ─── CRT Flicker ─── */
+        @keyframes crtFlicker {
+            0%   { opacity: 0.97; }
+            5%   { opacity: 0.95; }
+            10%  { opacity: 0.98; }
+            15%  { opacity: 0.96; }
+            20%  { opacity: 0.99; }
+            50%  { opacity: 0.97; }
+            80%  { opacity: 0.98; }
+            100% { opacity: 0.97; }
+        }
+        .crt-flicker {
+            animation: crtFlicker 8s infinite;
+        }
+
+        /* ─── Pixel Borders ─── */
+        .pixel-border       { box-shadow: 4px 4px 0px #00ff41; }
+        .pixel-border-pink  { box-shadow: 4px 4px 0px #ff0090; }
+        .pixel-border-amber { box-shadow: 4px 4px 0px #ffb000; }
+
+        /* ─── Neon Colors ─── */
+        .neon-green { color: #00ff41; }
+        .neon-pink  { color: #ff0090; }
+        .neon-amber { color: #ffb000; }
+
+        /* ─── Pixel Button ─── */
+        .pixel-btn {
+            border-radius: 0;
+            border: 2px solid #00ff41;
+            background-color: transparent;
+            color: #00ff41;
+            font-family: 'Press Start 2P', monospace;
+            transition: none;
+            cursor: pointer;
+            text-transform: uppercase;
+        }
+        .pixel-btn:hover, .pixel-btn:active {
+            background-color: #00ff41;
+            color: #000;
+        }
+        .pixel-btn.pink {
+            border-color: #ff0090;
+            color: #ff0090;
+        }
+        .pixel-btn.pink:hover, .pixel-btn.pink:active {
+            background-color: #ff0090;
+            color: #000;
+        }
+        .pixel-btn.amber {
+            border-color: #ffb000;
+            color: #ffb000;
+        }
+        .pixel-btn.amber:hover, .pixel-btn.amber:active {
+            background-color: #ffb000;
+            color: #000;
+        }
+
+        /* ─── Active Tab ─── */
+        .tab-active {
+            background-color: #00ff41;
+            color: #000;
+            box-shadow: 4px 4px 0px #00ff41;
+        }
+
+        /* ─── Arcade Card ─── */
+        .arcade-card {
+            background-color: #111111;
+            border: 2px solid #00ff41;
+            box-shadow: 4px 4px 0px #00ff41;
+        }
+        .arcade-card.pink {
+            border-color: #ff0090;
+            box-shadow: 4px 4px 0px #ff0090;
+        }
+        .arcade-card.amber {
+            border-color: #ffb000;
+            box-shadow: 4px 4px 0px #ffb000;
+        }
+
+        /* ─── Custom Scrollbar ─── */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #050510; }
+        ::-webkit-scrollbar-thumb { background: #00ff41; border: 1px solid #050510; }
+        ::-webkit-scrollbar-thumb:hover { background: #ffb000; }
+
+        /* ─── Animations ─── */
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50%      { opacity: 0; }
+        }
+        .blink { animation: blink 1s step-end infinite; }
+
+        @keyframes slideInUp {
+            from { transform: translateY(40px); opacity: 0; }
+            to   { transform: translateY(0);    opacity: 1; }
+        }
+        .slide-in-up { animation: slideInUp 0.4s ease-out forwards; }
+
+        @keyframes slideOutDown {
+            from { transform: translateY(0);    opacity: 1; }
+            to   { transform: translateY(40px); opacity: 0; }
+        }
+        .slide-out-down { animation: slideOutDown 0.3s ease-in forwards; }
+
+        @keyframes spinPixel {
+            0%   { transform: scale(1) rotate(0deg); }
+            50%  { transform: scale(1.15) rotate(180deg); }
+            100% { transform: scale(1) rotate(360deg); }
+        }
+        .spin-pixel { animation: spinPixel 0.8s linear infinite; }
+
+        @keyframes pulseGlow {
+            0%, 100% { box-shadow: 0 0 5px #00ff41, 4px 4px 0px #00ff41; }
+            50%      { box-shadow: 0 0 25px #00ff41, 0 0 50px rgba(0,255,65,0.3), 4px 4px 0px #00ff41; }
+        }
+        .pulse-glow { animation: pulseGlow 2s ease-in-out infinite; }
+
+        @keyframes fillBar {
+            from { width: 0%; }
+            to   { width: 100%; }
+        }
+        .fill-bar { animation: fillBar 1.5s linear forwards; }
+
+        @keyframes questFlash {
+            0%, 100% { opacity: 1; }
+            50%      { opacity: 0.3; }
+        }
+        .quest-flash { animation: questFlash 0.15s ease-in-out infinite; }
+
+        /* ─── Feature 1 Styles ─── */
+        @keyframes fallingRain {
+            0% { transform: translateY(-10vh); opacity: 0; }
+            10% { opacity: 0.4; }
+            90% { opacity: 0.4; }
+            100% { transform: translateY(110vh); opacity: 0; }
+        }
+        .pixel-rain-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            pointer-events: none;
+            z-index: 1;
+        }
+        .pixel-rain-drop {
+            position: absolute;
+            width: 3px;
+            height: 3px;
+            background-color: #00ff41;
+            animation: fallingRain 4s linear infinite;
+        }
+        @keyframes marqueeScroll {
+            0% { transform: translateX(100%); }
+            100% { transform: translateX(-100%); }
+        }
+        .marquee-container {
+            width: 100%;
+            overflow: hidden;
+            white-space: nowrap;
+            box-sizing: border-box;
+        }
+        .marquee-content {
+            display: inline-block;
+            animation: marqueeScroll 12s linear infinite;
+        }
+        @keyframes blinkBorderAmber {
+            0%, 100% { border-color: #ffb000; }
+            50%      { border-color: transparent; }
+        }
+        .blink-border-amber {
+            border: 2px dashed #ffb000;
+            animation: blinkBorderAmber 1s step-end infinite;
+        }
+
+        /* ─── Tab Buttons (Mobile) ─── */
+        .tab-btn {
+            font-size: 0.55rem;
+            padding: 0.5rem 0.2rem;
+            font-family: 'Press Start 2P', monospace;
+        }
+        @media (min-width: 640px) {
+            .tab-btn {
+                font-size: 0.75rem;
+                padding: 0.75rem 0.5rem;
+            }
+        }
+
+        /* ─── Line-clamp utility ─── */
+        .line-clamp-2 {
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+    </style>
+</head>
+
+<body class="min-h-screen flex flex-col overflow-x-hidden" x-data="arcadeApp">
+
+    <!-- ████ CRT SCANLINE OVERLAY ████ -->
+    <div class="crt-overlay"></div>
+
+    <!-- ████ WELCOME SPLASH SCREEN (FEATURE 1) ████ -->
+    <div x-show="showSplash" x-cloak class="fixed inset-0 z-[50000] bg-[#050510] flex flex-col items-center justify-between p-6 select-none overflow-hidden">
+        <!-- Pixel Rain -->
+        <div class="pixel-rain-container">
+            <div class="pixel-rain-drop" style="left: 5%; animation-delay: 0s; animation-duration: 3.5s;"></div>
+            <div class="pixel-rain-drop" style="left: 15%; animation-delay: 1.2s; animation-duration: 4.2s;"></div>
+            <div class="pixel-rain-drop" style="left: 25%; animation-delay: 0.5s; animation-duration: 3.8s;"></div>
+            <div class="pixel-rain-drop" style="left: 35%; animation-delay: 2.1s; animation-duration: 4.5s;"></div>
+            <div class="pixel-rain-drop" style="left: 45%; animation-delay: 1.7s; animation-duration: 3.9s;"></div>
+            <div class="pixel-rain-drop" style="left: 55%; animation-delay: 0.8s; animation-duration: 4.1s;"></div>
+            <div class="pixel-rain-drop" style="left: 65%; animation-delay: 2.5s; animation-duration: 3.6s;"></div>
+            <div class="pixel-rain-drop" style="left: 75%; animation-delay: 1.1s; animation-duration: 4.3s;"></div>
+            <div class="pixel-rain-drop" style="left: 85%; animation-delay: 0.3s; animation-duration: 3.7s;"></div>
+            <div class="pixel-rain-drop" style="left: 95%; animation-delay: 1.9s; animation-duration: 4.4s;"></div>
+            <div class="pixel-rain-drop" style="left: 50%; animation-delay: 1.5s; animation-duration: 4.0s;"></div>
+        </div>
+
+        <!-- Top spacing / decoration -->
+        <div class="w-full flex justify-between text-[0.4rem] text-gray-700 z-10 font-arcade">
+            <span>SYS: OK</span>
+            <span>v3.0.0</span>
+        </div>
+
+        <!-- Main Title / Info Container -->
+        <div class="flex-grow flex flex-col justify-center items-center z-10 w-full max-w-md space-y-6 text-center my-auto">
+            <!-- Title -->
+            <div class="space-y-3">
+                <h1 class="text-2xl sm:text-4xl neon-green font-arcade tracking-widest leading-normal" style="text-shadow: 3px 3px 0px #005511;">
+                    BACK TO MUMBAI
+                </h1>
+                <p class="text-[0.45rem] sm:text-xs neon-pink blink font-arcade leading-relaxed">
+                    LETS DO SOME SIDE QUESTS BITCHH
+                </p>
+            </div>
+
+            <!-- ASCII Art -->
+            <pre class="text-[0.55rem] sm:text-xs text-gray-500 font-mono leading-none select-none">
+░░░░░░░░░░░░░░░
+░  🎮 READY?  ░
+░░░░░░░░░░░░░░░</pre>
+
+            <!-- Announcement Banner -->
+            <div class="blink-border-amber p-3 w-full bg-black/40 text-center">
+                <div class="text-[0.5rem] sm:text-xs text-[#ffb000] font-arcade mb-1">📣 GUESS WHO IS BACKK</div>
+                <!-- <div class="text-[0.6rem] sm:text-sm text-[#ffb000] font-arcade font-bold">28 JUNE 2025</div> -->
+                <div id="date" class="text-[0.6rem] sm:text-sm text-[#ffb000] font-arcade font-bold"></div>
+
+                    <script>
+                    const today = new Date();
+
+                    const formattedDate = today.toLocaleDateString('en-GB', {
+                        day: '2-digit',
+                        month: 'long',
+                        year: 'numeric'
+                    }).toUpperCase();
+
+                    document.getElementById("date").textContent = formattedDate;
+                    </script>
+            </div>
+
+            <!-- Marquee Container -->
+            <div class="marquee-container w-full border-y border-gray-800 py-2 bg-black/20 overflow-hidden">
+                <div class="marquee-content text-[0.4rem] sm:text-[0.5rem] text-[#00ff41] font-arcade tracking-wider">
+                    ★ QUESTS AWAIT ★ HOPE THIS ISN'T BORING ★ INSERT COIN TO BEGIN ★ B × P ★
+                </div>
+            </div>
+
+            <!-- Start Button -->
+            <button @click="startGame()"
+                    class="pixel-btn text-xs sm:text-sm px-6 py-4 w-full pulse-glow"
+                    style="border-color: #00ff41; color: #00ff41;">
+                [ ▶ PRESS START ]
+            </button>
+        </div>
+
+        <!-- Footer / Credits -->
+        <div class="text-[0.35rem] text-gray-800 z-10 font-arcade">
+            © 2025 B × P ARCADE CO. LTD.
+        </div>
+    </div>
+
+    <!-- ████ ROOT WRAPPER ████ -->
+    <div class="crt-flicker flex flex-col min-h-screen relative z-10 p-3 sm:p-4 pb-28 max-w-2xl mx-auto w-full">
+
+        <!-- ═══ HEADER ═══ -->
+        <header class="text-center mb-6 sm:mb-8 mt-3 sm:mt-4 sticky top-0 bg-[#050510]/95 backdrop-blur-sm z-40 py-2 border-b border-gray-900/40">
+            <h1 class="text-xl sm:text-3xl neon-green mb-1.5 leading-loose" style="text-shadow: 2px 2px 0px #005511;">
+                UGH MUMBAI
+            </h1>
+            <h2 class="text-[0.5rem] sm:text-sm neon-pink blink mb-2">LET'S ATLEAST DO SOME SIDE QUEST</h2>
+            <div class="text-[0.45rem] sm:text-xs neon-amber blink">INSERT COIN - OR SHOVE IT UP YOUR ASS</div>
+
+            <!-- Score Chips & Quick Spin (Features 4 & 5) -->
+            <div class="flex items-center justify-between mt-3 max-w-xs mx-auto gap-2 px-4">
+                <!-- Benston score chip -->
+                <div class="px-2 py-1 border border-[#00ff41] bg-black/80 text-[0.4rem] sm:text-[0.5rem] font-arcade text-[#00ff41] shadow-[2px_2px_0px_#00ff41] min-w-[65px] text-center">
+                    B: <span x-text="players.p1.score"></span>
+                </div>
+
+                <!-- Tiny 🎲 Quick Spin Button -->
+                <button @click="quickSpin()"
+                        class="pixel-btn text-xs px-2.5 py-1 pulse-glow"
+                        style="border-color:#ffb000; color:#ffb000;"
+                        title="Quick Spin Random Quest">
+                    🎲
+                </button>
+
+                <!-- Pooja score chip -->
+                <div class="px-2 py-1 border border-[#ff0090] bg-black/80 text-[0.4rem] sm:text-[0.5rem] font-arcade text-[#ff0090] shadow-[2px_2px_0px_#ff0090] min-w-[65px] text-center">
+                    P: <span x-text="players.p2.score"></span>
+                </div>
+            </div>
+        </header>
+
+        <!-- ═══ MAIN CONTENT ═══ -->
+        <main class="flex-grow">
+
+            <!-- ████████████████████████████████████████████████ -->
+            <!-- ████  TAB 1 — PLACES BUILDER                ████ -->
+            <!-- ████████████████████████████████████████████████ -->
+            <div id="tab-places" x-show="activeTab === 'places'" x-cloak class="tab-panel space-y-5 mb-4">
+
+                <!-- ─── SECTION A: TODAY'S MISSION ─── -->
+                <div class="arcade-card pink p-4 sm:p-6">
+                    <h3 class="text-xs sm:text-sm neon-pink mb-1">[ TODAY'S MISSION ]</h3>
+                    <p class="text-[0.45rem] text-gray-500 mb-4">Drag to reorder. Tap to add/remove.</p>
+
+                    <div id="day-plan-list" class="space-y-2 min-h-[48px]">
+                        <!-- Empty State -->
+                        <div x-show="dayPlan.length === 0" class="text-center py-6">
+                            <div class="text-[0.6rem] sm:text-xs neon-pink blink">NO LOCATIONS LOADED</div>
+                            <div class="text-[0.45rem] text-gray-600 mt-2">Add places from the database below <span class="blink">▼</span></div>
+                        </div>
+
+                        <!-- Day Plan Items -->
+                        <template x-for="(placeId, idx) in dayPlan" :key="placeId">
+                            <div x-data="{ place: getPlaceById(placeId) }"
+                                 x-show="place"
+                                 class="flex items-center gap-2 sm:gap-3 p-2 sm:p-3"
+                                 style="background:#0a0a0a; border:1px solid #ff0090;">
+                                <span class="text-[0.45rem] neon-amber w-4 shrink-0" x-text="(idx+1)+'.'"></span>
+                                <span class="text-sm shrink-0" x-text="CATEGORY_ICONS[place.category] || '⭐'"></span>
+                                <div class="flex-grow min-w-0">
+                                    <div class="text-[0.5rem] sm:text-xs neon-green truncate" x-text="place.title"></div>
+                                    <div class="flex items-center gap-2 mt-1">
+                                        <span class="text-[0.4rem] px-1 py-0.5"
+                                              :style="'color:' + (CATEGORY_COLORS[place.category]||'#aaa') + ';border:1px solid ' + (CATEGORY_COLORS[place.category]||'#aaa')"
+                                              x-text="place.category"></span>
+                                        <span class="text-[0.4rem] neon-amber" x-text="place.time"></span>
+                                    </div>
+                                </div>
+                                <button @click="toggleDayPlan(place.id)"
+                                        class="text-xs neon-pink shrink-0 px-1 hover:bg-[#ff0090] hover:text-black">✕</button>
+                                <span class="drag-handle text-sm text-gray-500 cursor-grab shrink-0 select-none">≡</span>
+                            </div>
+                        </template>
+                    </div>
+
+                    <!-- Day Plan Stats -->
+                    <div x-show="dayPlan.length > 0" class="mt-3 pt-3 border-t border-gray-800 flex justify-between items-center">
+                        <span class="text-[0.45rem] text-gray-500">
+                            <span x-text="dayPlan.length"></span> LOCATION<span x-show="dayPlan.length !== 1">S</span> LOADED
+                        </span>
+                        <button @click="dayPlan = []; saveDayPlan()"
+                                class="pixel-btn pink text-[0.45rem] px-2 py-1">[ CLEAR ]</button>
+                    </div>
+                </div>
+
+                <!-- ─── SECTION B: LOCATIONS DATABASE ─── -->
+                <div class="arcade-card p-4 sm:p-6">
+                    <h3 class="text-xs sm:text-sm neon-green mb-4">[ LOCATIONS DATABASE ]</h3>
+
+                    <!-- Category Filters -->
+                    <div class="flex flex-wrap gap-1.5 sm:gap-2 mb-5">
+                        <template x-for="cat in allCategories" :key="cat">
+                            <button @click="filterCategory = cat"
+                                    class="pixel-btn text-[0.4rem] sm:text-[0.5rem] px-2 py-1"
+                                    :class="filterCategory === cat ? 'tab-active' : ''"
+                                    :style="filterCategory !== cat && cat !== 'All' ? 'border-color:' + (CATEGORY_COLORS[cat]||'#00ff41') + ';color:' + (CATEGORY_COLORS[cat]||'#00ff41') : ''"
+                                    x-text="cat"></button>
+                        </template>
+                    </div>
+
+                    <!-- Places Grid -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <template x-for="place in filteredPlaces" :key="place.id">
+                            <div class="p-3 relative"
+                                 :style="'background:#0a0a0a;border:2px solid '+(isInDayPlan(place.id)?'#00ff41':(CATEGORY_COLORS[place.category]||'#333'))+';box-shadow:'+(isInDayPlan(place.id)?'3px 3px 0px #00ff41':'2px 2px 0px '+(CATEGORY_COLORS[place.category]||'#333'))">
+
+                                <!-- In-Plan Badge -->
+                                <div x-show="isInDayPlan(place.id)"
+                                     class="absolute top-0 right-0 text-[0.35rem] bg-[#00ff41] text-black px-1.5 py-0.5 font-bold">▶ IN PLAN</div>
+
+                                <!-- Card Content -->
+                                <div class="flex items-start gap-2 mb-2">
+                                    <span class="text-base sm:text-lg" x-text="CATEGORY_ICONS[place.category] || '⭐'"></span>
+                                    <div class="min-w-0 flex-grow">
+                                        <div class="text-[0.5rem] sm:text-xs neon-green leading-relaxed" x-text="place.title"></div>
+                                        <div class="flex items-center gap-2 mt-1">
+                                            <span class="text-[0.35rem] px-1 py-0.5"
+                                                  :style="'color:'+(CATEGORY_COLORS[place.category]||'#aaa')+';border:1px solid '+(CATEGORY_COLORS[place.category]||'#aaa')"
+                                                  x-text="place.category"></span>
+                                            <span class="text-[0.35rem] neon-amber" x-text="place.time"></span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <p class="text-[0.4rem] text-gray-400 leading-relaxed mb-3 line-clamp-2" x-text="place.desc"></p>
+
+                                <div class="flex items-center justify-between">
+                                    <button @click="toggleDayPlan(place.id)"
+                                            class="pixel-btn text-[0.4rem] px-2 py-1"
+                                            :class="isInDayPlan(place.id) ? 'pink' : ''"
+                                            x-text="isInDayPlan(place.id) ? '[ − REMOVE ]' : '[ + ADD ]'"></button>
+                                    <button x-show="place.type === 'custom'"
+                                            @click="if(confirm('DELETE THIS LOCATION?')) removePlace(place.id)"
+                                            class="text-[0.55rem] text-gray-600 hover:text-[#ff0090] px-1">🗑</button>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+
+                    <div x-show="filteredPlaces.length === 0" class="text-center py-8">
+                        <div class="text-[0.6rem] text-gray-600">NO LOCATIONS FOUND</div>
+                    </div>
+                </div>
+
+                <!-- ─── SECTION C: ADD NEW LOCATION ─── -->
+                <div class="text-center">
+                    <button @click="showAddPlace = true" class="pixel-btn pink text-[0.55rem] sm:text-xs px-4 py-3 w-full sm:w-auto">
+                        [ + ADD NEW LOCATION ]
+                    </button>
+                </div>
+            </div>
+
+            <!-- ████████████████████████████████████████████████ -->
+            <!-- ████  TAB 2 — QUEST ENGINE                  ████ -->
+            <!-- ████████████████████████████████████████████████ -->
+            <div id="tab-quests" x-show="activeTab === 'quests'" x-cloak class="tab-panel space-y-5 mb-4">
+
+                <!-- ─── IDLE ─── -->
+                <div x-show="questStatus === 'idle'" class="arcade-card pink p-4 sm:p-6">
+                    <h3 class="text-sm sm:text-base neon-pink mb-2 text-center">QUEST ENGINE v2.0</h3>
+                    <p class="text-[0.4rem] text-gray-500 text-center mb-5">Spin to receive your side quest</p>
+
+                    <!-- Day Plan Tags -->
+                    <div class="mb-5">
+                        <div x-show="dayPlan.length > 0" class="flex flex-wrap gap-1.5 justify-center">
+                            <span class="text-[0.35rem] text-gray-500 w-full text-center mb-1">QUESTS FROM TODAY'S PLAN:</span>
+                            <template x-for="pid in dayPlan" :key="pid">
+                                <span x-data="{ p: getPlaceById(pid) }" x-show="p"
+                                      class="text-[0.35rem] px-1.5 py-0.5"
+                                      :style="'color:'+(CATEGORY_COLORS[p.category]||'#aaa')+';border:1px solid '+(CATEGORY_COLORS[p.category]||'#aaa')"
+                                      x-text="(CATEGORY_ICONS[p.category]||'⭐')+' '+p.title"></span>
+                            </template>
+                        </div>
+                        <div x-show="dayPlan.length === 0" class="text-center">
+                            <span class="text-[0.4rem] text-gray-600">NO PLAN SET — showing all quests</span>
+                        </div>
+                    </div>
+
+                    <!-- Vibe Filter Chips (Feature 2) -->
+                    <div class="mb-5">
+                        <div class="text-[0.4rem] text-gray-500 text-center mb-2 font-arcade">[ FILTER BY VIBE ]</div>
+                        <div class="flex flex-wrap gap-1.5 justify-center">
+                            <button @click="activeVibe = 'all'"
+                                    class="pixel-btn text-[0.38rem] sm:text-[0.45rem] px-2 py-1"
+                                    :class="activeVibe === 'all' ? 'tab-active' : ''">
+                                ALL
+                            </button>
+                            <template x-for="(icon, vibe) in VIBE_ICONS" :key="vibe">
+                                <button @click="activeVibe = vibe"
+                                        class="pixel-btn text-[0.38rem] sm:text-[0.45rem] px-2 py-1"
+                                        :class="activeVibe === vibe ? 'tab-active' : ''"
+                                        :style="activeVibe !== vibe ? 'border-color:' + VIBE_COLORS[vibe] + ';color:' + VIBE_COLORS[vibe] : ''"
+                                        x-text="icon + ' ' + vibe.toUpperCase()"></button>
+                            </template>
+                        </div>
+                    </div>
+
+                    <!-- SPIN BUTTON -->
+                    <button @click="spinQuest(false)"
+                            class="pixel-btn w-full py-4 sm:py-5 text-sm sm:text-base pulse-glow mb-3">
+                        [ ⟳ SPIN THE WHEEL ]
+                    </button>
+
+                    <div class="text-center">
+                        <button @click="spinQuest(true)"
+                                class="text-[0.4rem] text-gray-500 hover:text-[#ff0090] underline cursor-pointer bg-transparent border-none"
+                                style="font-family:'Press Start 2P',monospace;">
+                            [ RANDOM FROM ALL ]
+                        </button>
+                    </div>
+
+                    <div class="text-center mt-4 mb-2">
+                        <button @click="showAddQuest = true" class="pixel-btn pink text-[0.55rem] sm:text-xs px-4 py-3 w-full">
+                            [ + ADD CUSTOM QUEST ]
+                        </button>
+                    </div>
+
+                    <div class="text-center mt-3">
+                        <span class="text-[0.35rem] text-gray-700" x-text="getActiveCategoryQuests().length + ' QUESTS IN POOL'"></span>
+                    </div>
+                </div>
+
+                <!-- [ CUSTOM QUESTS ] Collapsible Section -->
+                <div x-show="questStatus === 'idle'" class="arcade-card p-4 sm:p-6" x-data="{ collapsed: true }">
+                    <button @click="collapsed = !collapsed"
+                            class="w-full flex justify-between items-center text-left focus:outline-none bg-transparent border-none p-0 text-xs sm:text-sm neon-green font-arcade">
+                        <span x-text="collapsed ? '[ + CUSTOM QUESTS ]' : '[ − CUSTOM QUESTS ]'"></span>
+                        <span class="text-[0.45rem] text-gray-500" x-text="customQuests.length + ' CREATED'"></span>
+                    </button>
+
+                    <div x-show="!collapsed" x-cloak class="mt-4 space-y-3">
+                        <!-- Empty state -->
+                        <div x-show="customQuests.length === 0" class="text-center py-4">
+                            <div class="text-[0.4rem] text-gray-600">NO CUSTOM QUESTS CREATED YET.</div>
+                        </div>
+
+                        <!-- List of Custom Quests -->
+                        <div class="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+                            <template x-for="quest in customQuests" :key="quest.id">
+                                <div class="p-3 relative"
+                                     style="background:#0a0a0a; border:1px solid #00ff41;">
+                                    <div class="flex items-start gap-2 mb-2">
+                                        <span class="text-base" x-text="quest.emoji || '🎯'"></span>
+                                        <div class="min-w-0 flex-grow">
+                                            <div class="text-[0.55rem] sm:text-xs neon-green truncate pr-8" x-text="quest.name"></div>
+                                            <div class="flex flex-wrap items-center gap-2 mt-1">
+                                                <span class="text-[0.35rem] px-1 py-0.5"
+                                                      :style="'color:'+(CATEGORY_COLORS[quest.category]||'#aaa')+';border:1px solid '+(CATEGORY_COLORS[quest.category]||'#aaa')"
+                                                      x-text="quest.category"></span>
+                                                <span class="text-[0.35rem] neon-amber" x-text="quest.points + ' PTS'"></span>
+                                                <span class="text-[0.35rem] px-1 py-0.5 uppercase"
+                                                      :style="'color:'+(VIBE_COLORS[quest.vibe]||'#aaa')+';border:1px solid '+(VIBE_COLORS[quest.vibe]||'#aaa')"
+                                                      x-text="quest.vibe"></span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <p class="text-[0.38rem] text-gray-400 leading-relaxed mb-2" x-text="quest.objective"></p>
+                                    <div class="flex justify-end">
+                                        <button @click="if(confirm('DELETE THIS QUEST?')) removeCustomQuest(quest.id)"
+                                                class="text-[0.45rem] text-gray-500 hover:text-[#ff0090] p-1 font-arcade">
+                                            🗑 DELETE
+                                        </button>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ─── SPINNING ─── -->
+                <div x-show="questStatus === 'spinning'" class="arcade-card pink p-4 sm:p-6">
+                    <h3 class="text-xs sm:text-sm neon-pink blink text-center mb-5">LOADING QUEST...</h3>
+
+                    <div class="text-center py-6">
+                        <div class="inline-block spin-pixel mb-4">
+                            <span class="text-4xl" x-text="spinDisplayQuest ? spinDisplayQuest.emoji : '🎰'"></span>
+                        </div>
+                        <div class="quest-flash">
+                            <div class="text-[0.55rem] sm:text-sm neon-green mb-2" x-text="spinDisplayQuest ? spinDisplayQuest.name : '...'"></div>
+                            <div class="text-[0.4rem] text-gray-500" x-text="spinDisplayQuest ? ('⭐ ' + spinDisplayQuest.points + ' PTS') : ''"></div>
+                        </div>
+                    </div>
+
+                    <div class="w-full h-3 bg-black border border-[#ff0090] mt-4">
+                        <div class="h-full bg-[#ff0090] fill-bar"></div>
+                    </div>
+                    <div class="text-[0.35rem] text-gray-600 text-center mt-2">SCANNING QUEST DATABASE...</div>
+                </div>
+
+                <!-- ─── ACTIVE ─── -->
+                <div id="quest-result-card" x-show="questStatus === 'active' && currentQuest" class="arcade-card p-4 sm:p-6"
+                     style="border-color:#ff0090; box-shadow:4px 4px 0px #ff0090, 0 0 20px rgba(255,0,144,0.2);">
+
+                    <div class="text-center mb-5">
+                        <div class="text-3xl sm:text-4xl mb-3" x-text="currentQuest?.emoji"></div>
+                        <h3 class="text-xs sm:text-sm neon-pink leading-relaxed" x-text="currentQuest?.name"></h3>
+                        <div class="flex flex-wrap justify-center gap-2 mt-2">
+                            <div class="text-[0.35rem] px-2 py-0.5"
+                                 :style="'color:'+(CATEGORY_COLORS[currentQuest?.category]||'#aaa')+';border:1px solid '+(CATEGORY_COLORS[currentQuest?.category]||'#aaa')"
+                                 x-text="(CATEGORY_ICONS[currentQuest?.category]||'⭐')+' '+(currentQuest?.category||'')"></div>
+                            <div x-show="currentQuest?.vibe" class="text-[0.35rem] px-2 py-0.5 uppercase"
+                                 :style="'color:'+(VIBE_COLORS[currentQuest?.vibe]||'#aaa')+';border:1px solid '+(VIBE_COLORS[currentQuest?.vibe]||'#aaa')"
+                                 x-text="(VIBE_ICONS[currentQuest?.vibe]||'🎭')+' '+(currentQuest?.vibe||'')"></div>
+                        </div>
+                    </div>
+
+                    <div class="mb-4 p-3" style="background:#0a0a0a; border:1px solid #ffb000;">
+                        <div class="text-[0.4rem] neon-amber mb-2">OBJECTIVE:</div>
+                        <p class="text-[0.45rem] sm:text-xs neon-green leading-relaxed" x-text="currentQuest?.objective"></p>
+                    </div>
+
+                    <div class="flex flex-wrap gap-2 mb-5 justify-center">
+                        <span class="text-[0.4rem] px-2 py-1 border border-[#00ff41] neon-green">
+                            👥 <span x-text="currentQuest?.players"></span>
+                        </span>
+                        <span class="text-[0.4rem] px-2 py-1 border border-[#ffb000] neon-amber">
+                            ⭐ <span x-text="currentQuest?.points"></span> PTS
+                        </span>
+                    </div>
+
+                    <!-- Winner Selection Panel -->
+                    <div x-show="showWinnerSelection" x-cloak class="border-2 border-[#ffb000] p-4 text-center bg-black/60 mb-4">
+                        <div class="text-[0.45rem] sm:text-xs neon-amber mb-4">WHO CRUSHED THIS QUEST?</div>
+                        <div class="grid grid-cols-3 gap-2">
+                            <button @click="awardAndComplete('p1'); showWinnerSelection = false;"
+                                    class="pixel-btn text-[0.4rem] sm:text-[0.5rem] py-2 px-1 border-[#00ff41] text-[#00ff41] hover:bg-[#00ff41] hover:text-black">
+                                <span x-text="'✓ ' + players.p1.name"></span>
+                            </button>
+                            <button @click="awardAndComplete('p2'); showWinnerSelection = false;"
+                                    class="pixel-btn text-[0.4rem] sm:text-[0.5rem] py-2 px-1 border-[#ff0090] text-[#ff0090] hover:bg-[#ff0090] hover:text-black">
+                                <span x-text="'✓ ' + players.p2.name"></span>
+                            </button>
+                            <button @click="awardAndComplete('both'); showWinnerSelection = false;"
+                                    class="pixel-btn text-[0.4rem] sm:text-[0.5rem] py-2 px-1 border-[#ffb000] text-[#ffb000] hover:bg-[#ffb000] hover:text-black">
+                                ✓ BOTH
+                            </button>
+                        </div>
+                        <div class="mt-3">
+                            <button @click="showWinnerSelection = false"
+                                    class="text-[0.35rem] text-gray-500 hover:text-white underline font-arcade bg-transparent border-none">
+                                [ BACK ]
+                            </button>
+                        </div>
+                    </div>
+
+                    <div x-show="!showWinnerSelection" class="flex flex-col sm:flex-row gap-3 mb-4">
+                        <button @click="showWinnerSelection = true"
+                                class="pixel-btn flex-1 py-3 text-[0.55rem] sm:text-xs"
+                                style="border-color:#00ff41;color:#00ff41;">
+                            [ ✓ QUEST COMPLETE ]
+                        </button>
+                        <button @click="skipQuest()"
+                                class="pixel-btn pink flex-1 py-3 text-[0.55rem] sm:text-xs">
+                            [ ✗ SKIP QUEST ]
+                        </button>
+                    </div>
+
+                    <div x-show="!showWinnerSelection" class="border-t border-gray-800 pt-3">
+                        <div class="text-[0.4rem] text-gray-500 text-center mb-2">AWARD BONUS POINTS:</div>
+                        <div class="flex gap-2 justify-center">
+                            <button @click="currentQuest.points += 5"
+                                    class="pixel-btn amber text-[0.4rem] px-3 py-1">[ +5 ]</button>
+                            <button @click="currentQuest.points += 10"
+                                    class="pixel-btn amber text-[0.4rem] px-3 py-1">[ +10 ]</button>
+                            <button @click="currentQuest.points += 20"
+                                    class="pixel-btn amber text-[0.4rem] px-3 py-1">[ +20 ]</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ─── DONE ─── -->
+                <div x-show="questStatus === 'done'" class="arcade-card p-4 sm:p-6 text-center"
+                     style="border-color:#00ff41; box-shadow:4px 4px 0px #00ff41, 0 0 30px rgba(0,255,65,0.2);">
+
+                    <div class="text-3xl mb-3">🏆</div>
+                    <h3 class="text-sm sm:text-base neon-green blink mb-3">QUEST COMPLETE!</h3>
+                    <div class="text-[0.55rem] sm:text-xs neon-pink mb-2" x-text="lastCompletedQuest?.name || ''"></div>
+                    <div class="text-sm sm:text-base neon-amber mb-5">
+                        <template x-if="lastCompletedQuest?.winner === 'both' || !lastCompletedQuest?.winner">
+                            <span>+<span x-text="lastCompletedQuest?.pointsAwarded || 0"></span> PTS EACH</span>
+                        </template>
+                        <template x-if="lastCompletedQuest?.winner === 'p1'">
+                            <span><span x-text="players.p1.name"></span> WINS +<span x-text="lastCompletedQuest?.pointsAwarded || 0"></span> PTS</span>
+                        </template>
+                        <template x-if="lastCompletedQuest?.winner === 'p2'">
+                            <span><span x-text="players.p2.name"></span> WINS +<span x-text="lastCompletedQuest?.pointsAwarded || 0"></span> PTS</span>
+                        </template>
+                    </div>
+
+                    <div class="flex flex-col sm:flex-row gap-3">
+                        <button @click="questStatus = 'idle'; currentQuest = null;"
+                                class="pixel-btn flex-1 py-3 text-[0.55rem] sm:text-xs pulse-glow">
+                            [ ⟳ SPIN AGAIN ]
+                        </button>
+                        <button @click="activeTab = 'scoreboard'"
+                                class="pixel-btn amber flex-1 py-3 text-[0.55rem] sm:text-xs">
+                            [ SEE SCOREBOARD ]
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ████████████████████████████████████████████████ -->
+            <!-- ████  TAB 3 — SCOREBOARD                    ████ -->
+            <!-- ████████████████████████████████████████████████ -->
+            <div id="tab-scoreboard" x-show="activeTab === 'scoreboard'" x-cloak class="tab-panel space-y-5 mb-4">
+
+                <div class="arcade-card amber p-4 sm:p-6">
+                    <h3 class="text-xs sm:text-sm neon-amber mb-5 text-center">[ HIGH SCORES ]</h3>
+
+                    <!-- Player Cards -->
+                    <div class="grid grid-cols-2 gap-3 sm:gap-4 mb-6">
+                        <!-- P1 -->
+                        <div class="p-3 sm:p-4 text-center relative"
+                             style="background:#0a0a0a; border:2px solid #00ff41; box-shadow:3px 3px 0px #00ff41;">
+                            <div x-show="players.p1.score > players.p2.score"
+                                 class="absolute -top-3 left-1/2 -translate-x-1/2 text-lg">👑</div>
+                            <div class="text-xs neon-green mb-2">P1</div>
+                            <div x-data="{ editing: false }" class="mb-3">
+                                <span x-show="!editing" @dblclick="editing = true" class="cursor-pointer select-none text-[0.4rem] sm:text-[0.5rem] neon-green border-b border-dashed border-transparent hover:border-[#00ff41]" x-text="players.p1.name"></span>
+                                <input x-show="editing" type="text" x-model="players.p1.name"
+                                       @change="savePlayers()" @blur="editing = false" @keyup.enter="editing = false"
+                                       class="bg-transparent text-center text-[0.4rem] sm:text-[0.5rem] neon-green w-full outline-none border-b border-[#00ff41]"
+                                       style="font-family:'Press Start 2P',monospace;" x-init="$watch('editing', val => { if(val) { $nextTick(() => $el.focus()); } })">
+                            </div>
+                            <div class="text-2xl sm:text-3xl neon-green mb-2" style="text-shadow:2px 2px 0px #005511;"
+                                 x-text="players.p1.score"></div>
+                            <div class="text-[0.35rem] text-gray-500">PTS</div>
+                            <div class="text-[0.35rem] text-gray-500 mt-2 font-arcade" x-text="'QUESTS: ' + (players.p1.questsCompleted || 0)"></div>
+                        </div>
+                        <!-- P2 -->
+                        <div class="p-3 sm:p-4 text-center relative"
+                             style="background:#0a0a0a; border:2px solid #ff0090; box-shadow:3px 3px 0px #ff0090;">
+                            <div x-show="players.p2.score > players.p1.score"
+                                 class="absolute -top-3 left-1/2 -translate-x-1/2 text-lg">👑</div>
+                            <div class="text-xs neon-pink mb-2">P2</div>
+                            <div x-data="{ editing: false }" class="mb-3">
+                                <span x-show="!editing" @dblclick="editing = true" class="cursor-pointer select-none text-[0.4rem] sm:text-[0.5rem] neon-pink border-b border-dashed border-transparent hover:border-[#ff0090]" x-text="players.p2.name"></span>
+                                <input x-show="editing" type="text" x-model="players.p2.name"
+                                       @change="savePlayers()" @blur="editing = false" @keyup.enter="editing = false"
+                                       class="bg-transparent text-center text-[0.4rem] sm:text-[0.5rem] neon-pink w-full outline-none border-b border-[#ff0090]"
+                                       style="font-family:'Press Start 2P',monospace;" x-init="$watch('editing', val => { if(val) { $nextTick(() => $el.focus()); } })">
+                            </div>
+                            <div class="text-2xl sm:text-3xl neon-pink mb-2" style="text-shadow:2px 2px 0px #550033;"
+                                 x-text="players.p2.score"></div>
+                            <div class="text-[0.35rem] text-gray-500">PTS</div>
+                            <div class="text-[0.35rem] text-gray-500 mt-2 font-arcade" x-text="'QUESTS: ' + (players.p2.questsCompleted || 0)"></div>
+                        </div>
+                    </div>
+
+                    <!-- Tie -->
+                    <div x-show="players.p1.score === players.p2.score && players.p1.score > 0"
+                         class="text-center text-[0.45rem] neon-amber mb-4 blink">⚔️ IT'S A TIE! ⚔️</div>
+
+                    <!-- Manual Points -->
+                    <div class="border-t border-gray-800 pt-4">
+                        <div class="text-[0.4rem] text-gray-500 text-center mb-3">[ AWARD MANUAL POINTS ]</div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div class="flex flex-col gap-1.5">
+                                <span class="text-[0.35rem] neon-green text-center truncate" x-text="players.p1.name"></span>
+                                <div class="flex gap-1 justify-center">
+                                    <button @click="players.p1.score += 5; savePlayers()" class="pixel-btn text-[0.35rem] px-2 py-1">+5</button>
+                                    <button @click="players.p1.score += 10; savePlayers()" class="pixel-btn text-[0.35rem] px-2 py-1">+10</button>
+                                    <button @click="players.p1.score += 25; savePlayers()" class="pixel-btn text-[0.35rem] px-2 py-1">+25</button>
+                                </div>
+                            </div>
+                            <div class="flex flex-col gap-1.5">
+                                <span class="text-[0.35rem] neon-pink text-center truncate" x-text="players.p2.name"></span>
+                                <div class="flex gap-1 justify-center">
+                                    <button @click="players.p2.score += 5; savePlayers()" class="pixel-btn pink text-[0.35rem] px-2 py-1">+5</button>
+                                    <button @click="players.p2.score += 10; savePlayers()" class="pixel-btn pink text-[0.35rem] px-2 py-1">+10</button>
+                                    <button @click="players.p2.score += 25; savePlayers()" class="pixel-btn pink text-[0.35rem] px-2 py-1">+25</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Campaign Stats -->
+                <div class="arcade-card p-4 sm:p-6">
+                    <h3 class="text-xs neon-green mb-4 text-center">[ CAMPAIGN STATS ]</h3>
+                    <div class="space-y-3">
+                        <div class="flex justify-between items-center p-2" style="background:#0a0a0a;border:1px solid #333;">
+                            <span class="text-[0.4rem] text-gray-400">QUESTS COMPLETED</span>
+                            <span class="text-xs neon-green" x-text="totalQuestsCompleted"></span>
+                        </div>
+                        <div class="flex justify-between items-center p-2" style="background:#0a0a0a;border:1px solid #333;">
+                            <span class="text-[0.4rem] text-gray-400">COMBINED SCORE</span>
+                            <span class="text-xs neon-amber" x-text="totalScore"></span>
+                        </div>
+                        <div class="flex justify-between items-center p-2" style="background:#0a0a0a;border:1px solid #333;">
+                            <span class="text-[0.4rem] text-gray-400">TOP CATEGORY</span>
+                            <span class="text-[0.4rem]" x-show="topCategory"
+                                  :style="'color:'+(CATEGORY_COLORS[topCategory]||'#aaa')"
+                                  x-text="(CATEGORY_ICONS[topCategory]||'⭐')+' '+(topCategory||'')"></span>
+                            <span class="text-[0.4rem] text-gray-600" x-show="!topCategory">NO DATA</span>
+                        </div>
+                        <div class="flex justify-between items-center p-2" style="background:#0a0a0a;border:1px solid #333;">
+                            <span class="text-[0.4rem] text-gray-400">AVG PTS / QUEST</span>
+                            <span class="text-xs neon-green" x-text="totalQuestsCompleted > 0 ? Math.round(totalScore / totalQuestsCompleted) : 0"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ─── FEATURE 3: QUICK DUEL MINI-GAME ─── -->
+                <div class="arcade-card p-4 sm:p-6" style="border-color:#ffb000; box-shadow: 4px 4px 0px #ffb000;">
+                    <h3 class="text-xs sm:text-sm neon-amber mb-4 text-center">[ QUICK DUEL ]</h3>
+                    
+                    <!-- Not Active State -->
+                    <div x-show="!duel.active" class="text-center py-3">
+                        <p class="text-[0.4rem] text-gray-500 mb-4 leading-relaxed">
+                            A quick 3-round Rock Paper Scissors showdown between Benston and Pooja.
+                            Winner gets +15 bonus points!
+                        </p>
+                        <button @click="startDuel()" class="pixel-btn amber text-[0.55rem] sm:text-xs px-4 py-3">
+                            [ ⚔️ START DUEL ]
+                        </button>
+                    </div>
+
+                    <!-- Active State -->
+                    <div x-show="duel.active" x-cloak class="space-y-4">
+                        <!-- Round & Scores -->
+                        <div class="flex justify-between items-center border-b border-gray-800 pb-3">
+                            <span class="text-[0.45rem] sm:text-xs neon-amber blink" x-text="'ROUND ' + duel.round"></span>
+                            <div class="text-[0.4rem] sm:text-xs text-center font-arcade">
+                                <span class="neon-green" x-text="players.p1.name + ': ' + duel.scores.p1"></span>
+                                <span class="text-gray-500"> | </span>
+                                <span class="neon-pink" x-text="players.p2.name + ': ' + duel.scores.p2"></span>
+                            </div>
+                        </div>
+
+                        <!-- Duel Arena Choices Grid -->
+                        <div class="grid grid-cols-2 gap-4 py-2">
+                            <!-- Player 1: Benston -->
+                            <div class="p-3 text-center border" :style="duel.p1Choice ? 'border-color:#00ff41; background:#051a05;' : 'border-color:#333;'">
+                                <div class="text-[0.45rem] neon-green mb-2" x-text="players.p1.name"></div>
+                                
+                                <!-- Choosing state -->
+                                <div x-show="!duel.p1Choice" class="flex justify-center gap-2">
+                                    <button @click="chooseDuel('p1', '✊')" class="pixel-btn text-base p-2">✊</button>
+                                    <button @click="chooseDuel('p1', '✋')" class="pixel-btn text-base p-2">✋</button>
+                                    <button @click="chooseDuel('p1', '✌️')" class="pixel-btn text-base p-2">✌️</button>
+                                </div>
+
+                                <!-- Chosen (Hidden) -->
+                                <div x-show="duel.p1Choice && !duel.revealed" class="text-[0.45rem] neon-green blink py-2">
+                                    🔒 LOCKED
+                                </div>
+
+                                <!-- Revealed -->
+                                <div x-show="duel.revealed" class="text-3xl py-1" x-text="duel.p1Choice"></div>
+                            </div>
+
+                            <!-- Player 2: Pooja -->
+                            <div class="p-3 text-center border" :style="duel.p2Choice ? 'border-color:#ff0090; background:#1f0514;' : 'border-color:#333;'">
+                                <div class="text-[0.45rem] neon-pink mb-2" x-text="players.p2.name"></div>
+                                
+                                <!-- Choosing state -->
+                                <div x-show="!duel.p2Choice" class="flex justify-center gap-2">
+                                    <button @click="chooseDuel('p2', '✊')" class="pixel-btn pink text-base p-2">✊</button>
+                                    <button @click="chooseDuel('p2', '✋')" class="pixel-btn pink text-base p-2">✋</button>
+                                    <button @click="chooseDuel('p2', '✌️')" class="pixel-btn pink text-base p-2">✌️</button>
+                                </div>
+
+                                <!-- Chosen (Hidden) -->
+                                <div x-show="duel.p2Choice && !duel.revealed" class="text-[0.45rem] neon-pink blink py-2">
+                                    🔒 LOCKED
+                                </div>
+
+                                <!-- Revealed -->
+                                <div x-show="duel.revealed" class="text-3xl py-1" x-text="duel.p2Choice"></div>
+                            </div>
+                        </div>
+
+                        <!-- Reveal and Advance Controls -->
+                        <div class="text-center pt-2">
+                            <!-- Show "Reveal" button when both choices are locked and not yet revealed -->
+                            <button x-show="duel.p1Choice && duel.p2Choice && !duel.revealed"
+                                    @click="revealDuelRound()"
+                                    class="pixel-btn w-full py-2.5 text-[0.5rem] sm:text-xs pulse-glow">
+                                [ 💥 REVEAL ROUND RESULT ]
+                            </button>
+
+                            <!-- Waiting for choices text -->
+                            <div x-show="(!duel.p1Choice || !duel.p2Choice) && !duel.revealed" class="text-[0.38rem] text-gray-500 blink py-2.5">
+                                WAITING FOR PLAYERS TO CHOOSE...
+                            </div>
+
+                            <!-- After Revealed Panel -->
+                            <div x-show="duel.revealed" class="space-y-3">
+                                <!-- Round result text -->
+                                <div class="text-[0.45rem] sm:text-xs neon-amber blink py-2 border border-[#ffb000] bg-black/40 font-arcade"
+                                     x-text="duel.result"></div>
+                                
+                                <!-- Action button -->
+                                <button @click="advanceDuel()"
+                                        class="pixel-btn amber w-full py-2.5 text-[0.5rem] sm:text-xs">
+                                    <span x-show="duel.done" x-text="'[ 🏆 FINALIZE DUEL — AWARD ' + players[duel.winner].name.toUpperCase() + ' +15 PTS ]'"></span>
+                                    <span x-show="!duel.done && duel.result.includes('TIE')">[ ⟳ REPLAY ROUND ]</span>
+                                    <span x-show="!duel.done && !duel.result.includes('TIE')">[ ▶ NEXT ROUND ]</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Forfeit Button -->
+                        <div class="text-center pt-2">
+                            <button @click="duel.active = false" class="text-[0.38rem] text-gray-600 hover:text-red-500 underline font-arcade bg-transparent border-none">
+                                [ FORFEIT DUEL ]
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="text-center">
+                    <button @click="resetScores()"
+                            class="pixel-btn text-[0.55rem] sm:text-xs px-4 py-3"
+                            style="border-color:#ff4400;color:#ff4400;">
+                        [ ⚠ RESET SCORES ]
+                    </button>
+                </div>
+            </div>
+
+            <!-- ████████████████████████████████████████████████ -->
+            <!-- ████  TAB 4 — QUEST HISTORY                 ████ -->
+            <!-- ████████████████████████████████████████████████ -->
+            <div id="tab-achieved" x-show="activeTab === 'achieved'" x-cloak class="tab-panel space-y-5 mb-4">
+
+                <div class="arcade-card p-4 sm:p-6">
+                    <h3 class="text-xs sm:text-sm neon-green mb-1 text-center">[ QUEST LOG ]</h3>
+                    <p class="text-[0.35rem] text-gray-600 text-center mb-5" x-text="totalQuestsCompleted + ' QUESTS LOGGED'"></p>
+
+                    <!-- Empty -->
+                    <div x-show="questHistory.length === 0" class="text-center py-8">
+                        <div class="text-[0.6rem] sm:text-xs text-gray-600 blink">NO QUESTS COMPLETED YET</div>
+                        <div class="text-[0.4rem] text-gray-700 mt-2">Spin the wheel to get started <span class="blink">▶</span></div>
+                    </div>
+
+                    <!-- Log List -->
+                    <div x-show="questHistory.length > 0" class="space-y-2 max-h-[60vh] overflow-y-auto">
+                        <template x-for="(quest, idx) in [...questHistory].reverse()" :key="idx">
+                            <div class="p-3 flex gap-3 items-start"
+                                 style="background:#0a0a0a; border:1px solid #333;">
+                                <span class="text-base sm:text-lg shrink-0" x-text="quest.emoji || '⭐'"></span>
+                                <div class="flex-grow min-w-0">
+                                    <div class="text-[0.5rem] sm:text-xs neon-green mb-1 leading-relaxed" x-text="quest.name"></div>
+                                    <p class="text-[0.35rem] text-gray-500 leading-relaxed mb-2 line-clamp-2" x-text="quest.objective"></p>
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <!-- Winner Badge -->
+                                        <span class="text-[0.35rem] px-1.5 py-0.5 uppercase font-arcade"
+                                              :class="{
+                                                  'neon-green border border-[#00ff41]': quest.winner === 'p1',
+                                                  'neon-pink border border-[#ff0090]': quest.winner === 'p2',
+                                                  'neon-amber border border-[#ffb000]': quest.winner === 'both' || !quest.winner
+                                              }"
+                                              x-text="quest.winner === 'p1' ? '🏆 ' + players.p1.name : (quest.winner === 'p2' ? '🏆 ' + players.p2.name : '🏆 BOTH')">
+                                        </span>
+                                        <span class="text-[0.35rem] px-1.5 py-0.5 neon-amber"
+                                              style="border:1px solid #ffb000;"
+                                              x-text="'⭐ '+(quest.pointsAwarded||quest.points)+' PTS'"></span>
+                                        <span class="text-[0.35rem] px-1.5 py-0.5"
+                                              :style="'color:'+(CATEGORY_COLORS[quest.category]||'#aaa')+';border:1px solid '+(CATEGORY_COLORS[quest.category]||'#aaa')"
+                                              x-text="quest.category||'Other'"></span>
+                                        <span x-show="quest.vibe" class="text-[0.35rem] px-1.5 py-0.5 uppercase"
+                                              :style="'color:'+(VIBE_COLORS[quest.vibe]||'#aaa')+';border:1px solid '+(VIBE_COLORS[quest.vibe]||'#aaa')"
+                                              x-text="(VIBE_ICONS[quest.vibe]||'🎭')+' '+(quest.vibe||'')"></span>
+                                        <span class="text-[0.3rem] text-gray-600"
+                                              x-text="quest.completedAt ? new Date(quest.completedAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) : ''"></span>
+                                        <span class="text-[0.3rem] text-gray-700"
+                                              x-text="quest.completedAt ? new Date(quest.completedAt).toLocaleDateString([],{day:'numeric',month:'short'}) : ''"></span>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
+                <div x-show="questHistory.length > 0" class="text-center">
+                    <button @click="clearHistory()"
+                            class="pixel-btn text-[0.55rem] sm:text-xs px-4 py-3"
+                            style="border-color:#ff4400;color:#ff4400;">
+                        [ 🗑 CLEAR LOG ]
+                    </button>
+                </div>
+            </div>
+
+        </main>
+
+        <!-- ████ ACHIEVEMENT POPUP ████ -->
+        <div x-show="showAchievement" x-cloak
+             x-transition:enter="transition ease-out duration-300"
+             x-transition:enter-start="opacity-0 translate-y-8"
+             x-transition:enter-end="opacity-100 translate-y-0"
+             x-transition:leave="transition ease-in duration-200"
+             x-transition:leave-start="opacity-100 translate-y-0"
+             x-transition:leave-end="opacity-0 translate-y-8"
+             class="fixed inset-0 z-[10000] flex items-start justify-center pt-8 pointer-events-none">
+            <div class="pointer-events-auto">
+                <div class="p-5 sm:p-6 text-center max-w-sm mx-4"
+                     style="background:#111; border:2px solid #ffb000; box-shadow:4px 4px 0px #ffb000, 0 0 40px rgba(255,176,0,0.5), 0 0 80px rgba(255,176,0,0.2);">
+                    <div class="text-3xl mb-2">🏆</div>
+                    <div class="text-[0.45rem] sm:text-xs neon-amber blink mb-2">★ ACHIEVEMENT UNLOCKED ★</div>
+                    <div class="text-[0.45rem] sm:text-xs neon-green leading-relaxed" x-text="achievementText"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ████ BOTTOM NAV TABS ████ -->
+        <nav class="fixed bottom-0 left-0 w-full bg-[#111111] border-t-2 border-[#00ff41] z-50 p-2 sm:p-3">
+            <div class="max-w-2xl mx-auto flex justify-between gap-1 sm:gap-2">
+                <button @click="activeTab = 'places'" class="flex-1 pixel-btn tab-btn"
+                        :class="{ 'tab-active': activeTab === 'places' }">
+                    [PLACES]
+                </button>
+                <button @click="activeTab = 'quests'" class="flex-1 pixel-btn tab-btn"
+                        :class="{ 'tab-active': activeTab === 'quests' }">
+                    [QUESTS]
+                </button>
+                <button @click="activeTab = 'scoreboard'" class="flex-1 pixel-btn tab-btn"
+                        :class="{ 'tab-active': activeTab === 'scoreboard' }">
+                    [SCORES]
+                </button>
+                <button @click="activeTab = 'achieved'" class="flex-1 pixel-btn tab-btn"
+                        :class="{ 'tab-active': activeTab === 'achieved' }">
+                    [LOG]
+                </button>
+            </div>
+        </nav>
+
+    </div>
+
+    <!-- ████ ADD PLACE MODAL ████ -->
+    <div x-show="showAddPlace" x-cloak
+         x-transition:enter="transition ease-out duration-200"
+         x-transition:enter-start="opacity-0"
+         x-transition:enter-end="opacity-100"
+         x-transition:leave="transition ease-in duration-150"
+         x-transition:leave-start="opacity-100"
+         x-transition:leave-end="opacity-0"
+         class="fixed inset-0 z-[9990] flex items-center justify-center p-4"
+         @keydown.escape.window="showAddPlace = false">
+        <div class="absolute inset-0 bg-black/80" @click="showAddPlace = false"></div>
+        <div class="relative w-full max-w-md arcade-card pink p-5 sm:p-6" @click.stop>
+            <h3 class="text-xs sm:text-sm neon-pink mb-5 text-center">INSERT NEW LOCATION</h3>
+            <div class="space-y-4">
+                <div>
+                    <label class="text-[0.4rem] text-gray-500 block mb-1">TITLE</label>
+                    <input x-model="newPlaceForm.title" type="text" placeholder="Enter location name..."
+                           autocomplete="off" spellcheck="false"
+                           class="w-full bg-black border-2 border-[#ff0090] text-[#00ff41] text-[0.55rem] p-2 outline-none focus:border-[#00ff41] placeholder-gray-700"
+                           style="font-family:'Press Start 2P',monospace;">
+                </div>
+                <div>
+                    <label class="text-[0.4rem] text-gray-500 block mb-1">CATEGORY</label>
+                    <select x-model="newPlaceForm.category"
+                            class="w-full bg-black border-2 border-[#ff0090] text-[#00ff41] text-[0.55rem] p-2 outline-none focus:border-[#00ff41]"
+                            style="font-family:'Press Start 2P',monospace;">
+                        <option value="Flat">🏠 Flat</option>
+                        <option value="Outdoor">🌿 Outdoor</option>
+                        <option value="Explore">🗺️ Explore</option>
+                        <option value="Mall">🛍️ Mall</option>
+                        <option value="Restaurant">🍽️ Restaurant</option>
+                        <option value="Cinema">🎬 Cinema</option>
+                        <option value="Beach">🏖️ Beach</option>
+                        <option value="Personal">💜 Personal</option>
+                        <option value="Other">⭐ Other</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="text-[0.4rem] text-gray-500 block mb-1">TIME OF DAY</label>
+                    <input x-model="newPlaceForm.time" type="text" placeholder="Morning / Evening / Night..."
+                           autocomplete="off" spellcheck="false"
+                           class="w-full bg-black border-2 border-[#ff0090] text-[#ffb000] text-[0.55rem] p-2 outline-none focus:border-[#00ff41] placeholder-gray-700"
+                           style="font-family:'Press Start 2P',monospace;">
+                </div>
+                <div>
+                    <label class="text-[0.4rem] text-gray-500 block mb-1">DESCRIPTION</label>
+                    <textarea x-model="newPlaceForm.desc" rows="2" placeholder="Short mission brief..."
+                              autocomplete="off" spellcheck="false"
+                              class="w-full bg-black border-2 border-[#ff0090] text-[#00ff41] text-[0.55rem] p-2 outline-none focus:border-[#00ff41] placeholder-gray-700 resize-none"
+                              style="font-family:'Press Start 2P',monospace;"></textarea>
+                </div>
+            </div>
+            <div class="flex gap-3 mt-5">
+                <button @click="addPlace()" class="pixel-btn flex-1 text-[0.5rem] py-2">[ CONFIRM ]</button>
+                <button @click="showAddPlace = false" class="pixel-btn pink flex-1 text-[0.5rem] py-2">[ CANCEL ]</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ████ ADD QUEST MODAL ████ -->
+    <div x-show="showAddQuest" x-cloak
+         x-transition:enter="transition ease-out duration-200"
+         x-transition:enter-start="opacity-0"
+         x-transition:enter-end="opacity-100"
+         x-transition:leave="transition ease-in duration-150"
+         x-transition:leave-start="opacity-100"
+         x-transition:leave-end="opacity-0"
+         class="fixed inset-0 z-[9990] flex items-center justify-center p-4"
+         @keydown.escape.window="showAddQuest = false">
+        <div class="absolute inset-0 bg-black/80" @click="showAddQuest = false"></div>
+        <div class="relative w-full max-w-md arcade-card p-5 sm:p-6" style="border-color: #ffb000; box-shadow: 4px 4px 0px #ffb000;" @click.stop>
+            <h3 class="text-xs sm:text-sm neon-amber mb-5 text-center">CREATE CUSTOM QUEST</h3>
+            <div class="space-y-4">
+                <div>
+                    <label class="text-[0.4rem] text-gray-500 block mb-1">QUEST NAME</label>
+                    <input x-model="newQuestForm.name" type="text" placeholder="Enter quest name..."
+                           autocomplete="off" spellcheck="false"
+                           class="w-full bg-black border-2 border-[#ffb000] text-[#00ff41] text-[0.55rem] p-2 outline-none focus:border-[#00ff41] placeholder-gray-700"
+                           style="font-family:'Press Start 2P',monospace;">
+                </div>
+                <div>
+                    <label class="text-[0.4rem] text-gray-500 block mb-1">OBJECTIVE (MAX 200 CHARS)</label>
+                    <textarea x-model="newQuestForm.objective" rows="3" maxlength="200" placeholder="Describe the objective..."
+                              autocomplete="off" spellcheck="false"
+                              class="w-full bg-black border-2 border-[#ffb000] text-[#00ff41] text-[0.55rem] p-2 outline-none focus:border-[#00ff41] placeholder-gray-700 resize-none"
+                              style="font-family:'Press Start 2P',monospace;"></textarea>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-[0.4rem] text-gray-500 block mb-1">CATEGORY</label>
+                        <select x-model="newQuestForm.category"
+                                class="w-full bg-black border-2 border-[#ffb000] text-[#00ff41] text-[0.55rem] p-2 outline-none focus:border-[#00ff41]"
+                                style="font-family:'Press Start 2P',monospace;">
+                            <option value="Flat">🏠 Flat</option>
+                            <option value="Outdoor">🌿 Outdoor</option>
+                            <option value="Explore">🗺️ Explore</option>
+                            <option value="Mall">🛍️ Mall</option>
+                            <option value="Restaurant">🍽️ Restaurant</option>
+                            <option value="Cinema">🎬 Cinema</option>
+                            <option value="Beach">🏖️ Beach</option>
+                            <option value="Personal">💜 Personal</option>
+                            <option value="Other">⭐ Other</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-[0.4rem] text-gray-500 block mb-1">VIBE</label>
+                        <select x-model="newQuestForm.vibe"
+                                class="w-full bg-black border-2 border-[#ffb000] text-[#00ff41] text-[0.55rem] p-2 outline-none focus:border-[#00ff41]"
+                                style="font-family:'Press Start 2P',monospace;">
+                            <option value="chaotic">🔥 chaotic</option>
+                            <option value="wholesome">🌸 wholesome</option>
+                            <option value="brave">🛡️ brave</option>
+                            <option value="childish">🧸 childish</option>
+                            <option value="intimate">💖 intimate</option>
+                            <option value="brainrot">🧠 brainrot</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-[0.4rem] text-gray-500 block mb-1">POINTS (10-200)</label>
+                        <input x-model.number="newQuestForm.points" type="number" min="10" max="200"
+                               class="w-full bg-black border-2 border-[#ffb000] text-[#ffb000] text-[0.55rem] p-2 outline-none focus:border-[#00ff41]"
+                               style="font-family:'Press Start 2P',monospace;">
+                    </div>
+                    <div>
+                        <label class="text-[0.4rem] text-gray-500 block mb-1">EMOJI (MAX 1)</label>
+                        <input x-model="newQuestForm.emoji" type="text" placeholder="🎯" maxlength="4"
+                               @input="const chars = Array.from($event.target.value); if(chars.length > 0) { newQuestForm.emoji = chars[0]; }"
+                               class="w-full bg-black border-2 border-[#ffb000] text-[#00ff41] text-[0.55rem] p-2 outline-none focus:border-[#00ff41] placeholder-gray-700 text-center"
+                               style="font-family:'Press Start 2P',monospace;">
+                    </div>
+                </div>
+            </div>
+            <div class="flex gap-3 mt-5">
+                <button @click="addCustomQuest()" class="pixel-btn amber flex-1 text-[0.5rem] py-2">[ CREATE ]</button>
+                <button @click="showAddQuest = false" class="pixel-btn pink flex-1 text-[0.5rem] py-2">[ CANCEL ]</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ████████████████████████████████████████████████████████████ -->
+    <!-- ████  SCRIPT — DATA + ALPINE COMPONENT                 ████ -->
+    <!-- ████████████████████████████████████████████████████████████ -->
+    <script>
+        // ═══════════════════════════════════════
+        // a. PLACES DATA
+        // ═══════════════════════════════════════
+        const PLACES_DATA = [
+            { id:1,  title:"Deep Focus Mode",         time:"Morning",   desc:"You crush your books, I'll be your study buddy/caffeine fetcher.", type:"work",      category:"Flat" },
+            { id:2,  title:"Sunrise at Priyadarshini", time:"Morning",   desc:"Coffee, ocean breeze, and zero crowds.",                           type:"relax",     category:"Outdoor" },
+            { id:3,  title:"Art Attack @ Tao",         time:"Afternoon", desc:"Walk through cool art and act like critics.",                      type:"culture",   category:"Explore" },
+            { id:4,  title:"Elephanta Escape",         time:"Afternoon", desc:"Boat ride, history, and an island getaway.",                       type:"adventure", category:"Explore" },
+            { id:5,  title:"IKEA Recon",               time:"Evening",   desc:"Walking through aesthetic rooms picking dream furniture.",          type:"casual",    category:"Mall" },
+            { id:6,  title:"Prakash Dosa Pilgrimage",  time:"Evening",   desc:"Filter coffee softy. Non-negotiable.",                             type:"food",      category:"Restaurant" },
+            { id:7,  title:"SoBo Movie Night",         time:"Night",     desc:"Regal Cinema vibes — vintage, cozy, popcorn-fueled.",              type:"culture",   category:"Cinema" },
+            { id:8,  title:"Ice Cream Run",            time:"Night",     desc:"Churchgate walk with K. Rustom's slabs. Classic.",                 type:"food",      category:"Restaurant" },
+            { id:9,  title:"Botanical Garden Stroll",  time:"Morning",   desc:"Just us, some penguins, and greenery.",                            type:"relax",     category:"Outdoor" },
+            { id:10, title:"Pasta Workshop",           time:"Night",     desc:"We cook, we eat, we crash. Zero effort.",                          type:"food",      category:"Flat" },
+            { id:11, title:"Palladium Scavenger Hunt", time:"Evening",   desc:"Shopping for nothing in particular, just vibes.",                  type:"casual",    category:"Mall" },
+            { id:12, title:"Midnight Worli Cycle",     time:"Midnight",  desc:"Empty streets, cold air, sea view.",                               type:"adventure", category:"Outdoor" },
+            { id:13, title:"Sunset @ Marine Drive",    time:"Evening",   desc:"Doing nothing is actually doing something.",                       type:"relax",     category:"Outdoor" },
+            { id:14, title:"Street Snack Safari",      time:"Evening",   desc:"Roaming Fort and grabbing whatever looks good.",                   type:"food",      category:"Restaurant" },
+            { id:15, title:"Worli Sea Face Cycling",   time:"Morning",   desc:"Cycle at sunrise along the sea face. Wind in your face.",          type:"adventure", category:"Outdoor" }
+        ];
+
+        // ═══════════════════════════════════════
+        // b. CATEGORY COLORS
+        // ═══════════════════════════════════════
+        const CATEGORY_COLORS = {
+            "Flat":       "#00ff41",
+            "Outdoor":    "#00ffff",
+            "Explore":    "#bf00ff",
+            "Mall":       "#ff0090",
+            "Restaurant": "#ffb000",
+            "Cinema":     "#ff4400",
+            "Beach":      "#00cfff",
+            "Personal":   "#ff5e97",
+            "Other":      "#aaaaaa"
+        };
+
+        // ═══════════════════════════════════════
+        // c. CATEGORY ICONS
+        // ═══════════════════════════════════════
+        const CATEGORY_ICONS = {
+            "Flat":"🏠", "Outdoor":"🌿", "Explore":"🗺️",
+            "Mall":"🛍️", "Restaurant":"🍽️", "Cinema":"🎬",
+            "Beach":"🏖️", "Personal":"💜", "Other":"⭐"
+        };
+
+        // ═══════════════════════════════════════
+        // c2. VIBE COLORS & ICONS
+        // ═══════════════════════════════════════
+        const VIBE_COLORS = {
+            "chaotic": "#ff4400",
+            "wholesome": "#00ff41",
+            "brave": "#ffb000",
+            "childish": "#00ffff",
+            "intimate": "#ff0090",
+            "brainrot": "#bf00ff"
+        };
+
+        const VIBE_ICONS = {
+            "chaotic": "🔥",
+            "wholesome": "💛",
+            "brave": "💪",
+            "childish": "👶",
+            "intimate": "🤫",
+            "brainrot": "🧠"
+        };
+
+        // ═══════════════════════════════════════
+        // d. SIDE QUESTS
+        // ═══════════════════════════════════════
+        const SIDE_QUESTS = {
+            "Outdoor": [
+              { id:"oq1", name:"The NPC Freeze", objective:"Stop dead in the middle of a busy footpath. Freeze completely. Count how many people walk around you without noticing.", players:"Both", points:30, emoji:"🧊", vibe:"chaotic" },
+              { id:"oq2", name:"The Compliment Bomb", objective:"Find a stranger and give them a weirdly specific compliment with a straight face. ('Your dupatta has chaotic good energy.')", players:"Both", points:40, emoji:"💬", vibe:"brave" },
+              { id:"oq3", name:"The Public Pushup", objective:"Drop and do 5 pushups in public. Act like it's completely routine. No laughing.", players:"Both", points:30, emoji:"💪", vibe:"chaotic" },
+              { id:"oq4", name:"Touch Grass (Literal)", objective:"Find a patch of grass and actually lie down flat in it for 3 full minutes. No phones. Ignore everyone.", players:"Both", points:20, emoji:"🌱", vibe:"wholesome" },
+              { id:"oq5", name:"The Fake Tour Guide", objective:"One person pretends to be a tour guide to the other in front of a random building. Make up completely ridiculous historical facts loudly.", players:"Both", points:50, emoji:"🎙️", vibe:"chaotic" },
+              { id:"oq6", name:"The Autograph Ask", objective:"Walk up to a random person and ask for their autograph like they're famous. Keep a straight face the whole time.", players:"Both", points:60, emoji:"✍️", vibe:"brave" },
+              { id:"oq7", name:"Rock Paper Scissors with a Stranger", objective:"Challenge a random stranger to one round of rock paper scissors. Most wins from strangers in 10 minutes wins the quest.", players:"Both", points:50, emoji:"✊", vibe:"chaotic" },
+              { id:"oq8", name:"The Human Statue", objective:"Strike the most dramatic pose and hold it for 90 seconds in public. First to break character loses.", players:"Both", points:40, emoji:"🗿", vibe:"chaotic" },
+              { id:"oq9", name:"The Slow Walk Race", objective:"Both walk as SLOWLY as humanly possible from point A to B in a busy area. First one to speed up loses.", players:"Both", points:30, emoji:"🐢", vibe:"brainrot" },
+              { id:"oq10", name:"The Bystander Award", objective:"Write fake awards on paper. ('Most Likely to Be a Time Traveler'). Hand them to strangers with zero explanation. Walk away.", players:"Both", points:70, emoji:"🏆", vibe:"chaotic" },
+              { id:"oq11", name:"The Cat Hunt", objective:"Find 3 stray cats and photograph each one. Give each cat a name and a made-up personality. Present findings to each other.", players:"Both", points:40, emoji:"🐱", vibe:"wholesome" },
+              { id:"oq12", name:"The Flower Hunt", objective:"Find 5 different colored flowers or plants. No internet. Both identify what they are using only your collective brainpower.", players:"Both", points:30, emoji:"🌸", vibe:"wholesome" },
+              { id:"oq13", name:"The Color Hunt", objective:"Race to find something in every color of the rainbow in your immediate surroundings. First to complete ROY G BIV wins.", players:"Both", points:50, emoji:"🌈", vibe:"childish" },
+              { id:"oq14", name:"The Bus Roulette", objective:"Get on the next bus or auto that comes. Ride exactly 3 stops. Get off. Spend 10 minutes in that exact spot. Document what you find.", players:"Both", points:70, emoji:"🚌", vibe:"chaotic" },
+              { id:"oq15", name:"The Boob Sketch", objective:"Both draw the most creative abstract boob sketch on paper in 60 seconds. Compare. The other person is the judge. No self-voting.", players:"Both", points:50, emoji:"✏️", vibe:"childish" },
+              { id:"oq16", name:"The Invisible Ball", objective:"Both mime throwing and catching an invisible ball back and forth in public for 2 full minutes. Commit completely. No smiling.", players:"Both", points:40, emoji:"⚾", vibe:"brainrot" },
+              { id:"oq17", name:"Clouds Shapes", objective:"Both lie on the ground and stare at the sky for 5 minutes. Each person must identify at least 3 shapes in clouds and explain them seriously.", players:"Both", points:20, emoji:"☁️", vibe:"wholesome" },
+              { id:"oq18", name:"The Pigeon Treaty", objective:"Sit near pigeons. Both must attempt to communicate with them using only hand gestures. Whoever gets the closest pigeon wins.", players:"Both", points:30, emoji:"🐦", vibe:"brainrot" }
+            ],
+            "Beach": [
+              { id:"bq1", name:"The Cat Philosopher", objective:"Find a stray cat or dog. Record a 30-second video explaining its life philosophy based purely on its resting face.", players:"Both", points:50, emoji:"🐱", vibe:"brainrot" },
+              { id:"bq2", name:"The Sandbody", objective:"Lie flat. The other person traces your full body outline in the sand. Decorate it together. Most creative design wins.", players:"Both", points:40, emoji:"🏖️", vibe:"childish" },
+              { id:"bq3", name:"Sunset Watch No Phones", objective:"Watch the entire sunset together. Strictly no phones from the moment the sun touches the horizon until it's fully gone.", players:"Both", points:20, emoji:"🌅", vibe:"wholesome" },
+              { id:"bq4", name:"The Tide Dare", objective:"Both stand at the water's edge. Who can stay the longest without flinching from the waves? No moving back allowed.", players:"Both", points:30, emoji:"🌊", vibe:"brave" },
+              { id:"bq5", name:"Build a Sandcastle", objective:"Both build the most elaborate sandcastle you can in 15 minutes. Strangers vote on whose is better. Loser has to carry the other person's bag for 20 mins.", players:"Both", points:60, emoji:"🏰", vibe:"childish" },
+              { id:"bq6", name:"Barefoot 10 Minutes", objective:"Remove shoes. Stand in the sand barefoot for 10 full minutes. No phones. Just be there.", players:"Both", points:20, emoji:"👣", vibe:"wholesome" },
+              { id:"bq7", name:"The Seashell Economy", objective:"Collect 5 unique shells each. Trade them as if they're incredibly valuable commodities. Negotiate absolutely seriously.", players:"Both", points:30, emoji:"🐚", vibe:"childish" },
+              { id:"bq8", name:"Write It in the Sand", objective:"Each person writes one honest sentence in the sand about how they feel right now. Photograph it before the waves take it.", players:"Both", points:20, emoji:"📝", vibe:"intimate" },
+              { id:"bq9", name:"The Splash War", objective:"You're at the edge of the water. Both must get the other's feet wet before they can get yours. No rules. Full commitment.", players:"Both", points:40, emoji:"💦", vibe:"childish" }
+            ],
+            "Restaurant": [
+              { id:"rq1", name:"The Phone Call Dare", objective:"Call a mutual friend. Say 'I love you' with zero context. Hang up immediately. Both watch the reply come in together.", players:"Both", points:60, emoji:"📞", vibe:"chaotic" },
+              { id:"rq2", name:"The Table Swap", objective:"Ask the strangers at the next table if you can swap seats for exactly 60 seconds. No explanation. Document their reaction.", players:"Both", points:70, emoji:"🔄", vibe:"brave" },
+              { id:"rq3", name:"Feed Me", objective:"Your partner must feed you your entire meal or snack. No self-feeding allowed. Loser of the last challenge does the feeding.", players:"Both", points:40, emoji:"🥄", vibe:"intimate" },
+              { id:"rq4", name:"Order Blind", objective:"You order for each other without asking what they want. They must finish it completely. No complaints allowed.", players:"Both", points:50, emoji:"🎲", vibe:"chaotic" },
+              { id:"rq5", name:"The Dramatic Reading", objective:"Read your last WhatsApp conversation with each other out loud in the most theatrical, Bollywood-dramatic voice possible.", players:"Both", points:40, emoji:"🎭", vibe:"brainrot" },
+              { id:"rq6", name:"The Waiter Monologue", objective:"Explain your order to the waiter as if you're presenting a quarterly report to a boardroom. Completely serious. Full eye contact.", players:"One", points:60, emoji:"💼", vibe:"chaotic" },
+              { id:"rq7", name:"Speed Debate", objective:"Each gets 60 seconds to argue the OPPOSITE of their actual opinion on any topic. Most convincing performance wins.", players:"Both", points:40, emoji:"⚡", vibe:"chaotic" },
+              { id:"rq8", name:"Chocolate on the Nose", objective:"Place a piece of chocolate on the other person's nose. They must transfer it to their mouth without using their hands. Time it.", players:"Both", points:50, emoji:"🍫", vibe:"childish" },
+              { id:"rq9", name:"Eat Like a Child", objective:"Buy whatever dessert or snack you want and eat it with maximum childish enthusiasm — licking fingers, making sounds, zero dignity.", players:"Both", points:30, emoji:"🍭", vibe:"childish" },
+              { id:"rq10", name:"The Silence Meal", objective:"Eat an entire dish in complete silence. First person to speak, laugh, or make a noise loses. Loser pays for that dish.", players:"Both", points:40, emoji:"🤫", vibe:"intimate" },
+              { id:"rq11", name:"The Food Review", objective:"Both write a fake 5-star Zomato review for the most ordinary item on the table, describing it like it's a Michelin-starred experience. Read aloud.", players:"Both", points:30, emoji:"⭐", vibe:"brainrot" }
+            ],
+            "Mall": [
+              { id:"mq1", name:"The Trojan Purchase", objective:"Each finds the weirdest, most useless item in any store and must convince the other to buy it for them. Whoever caves, loses.", players:"Both", points:60, emoji:"🛒", vibe:"chaotic" },
+              { id:"mq2", name:"The Accessory Dare", objective:"Each picks one item — hat, sunglasses, scarf, whatever — that the other person MUST wear in public for the next 20 minutes.", players:"Both", points:70, emoji:"🕶️", vibe:"chaotic" },
+              { id:"mq3", name:"The Space Costume", objective:"Ask a store employee to help find clothes for an 'upcoming moon landing.' Explain seriously that regular clothes won't work in zero gravity.", players:"One", points:80, emoji:"🚀", vibe:"brave" },
+              { id:"mq4", name:"The Mannequin Challenge", objective:"Stand next to a mannequin and copy its exact pose for 2 full minutes. Don't break even when people stare directly at you.", players:"Both", points:50, emoji:"🪆", vibe:"chaotic" },
+              { id:"mq5", name:"The Budget Stylist", objective:"Each assembles a complete outfit for the other using only items from one store, under ₹500. The other must wear it for 15 minutes.", players:"Both", points:80, emoji:"👗", vibe:"chaotic" },
+              { id:"mq6", name:"The Fake Breakup Scene", objective:"Stage a loud, dramatic fake breakup in the middle of the mall. No one around should know it's fake. Most convincing wins.", players:"Both", points:100, emoji:"💔", vibe:"chaotic" },
+              { id:"mq7", name:"The Toy Section Takeover", objective:"Both spend 10 minutes in the toy section playing with toys as if you're 7 years old. Whoever breaks character first loses.", players:"Both", points:50, emoji:"🧸", vibe:"childish" },
+              { id:"mq8", name:"The Perfume Bar Dare", objective:"Both go to a perfume counter and describe scents using only completely unrelated adjectives. ('This one smells like a disappointed accountant.')", players:"Both", points:40, emoji:"🌹", vibe:"brainrot" }
+            ],
+            "Cinema": [
+              { id:"cq1", name:"Whisper Commentary", objective:"For the first 5 minutes, whisper the most ridiculous fake plot summary to each other about what you THINK will happen in the film.", players:"Both", points:30, emoji:"🎬", vibe:"brainrot" },
+              { id:"cq2", name:"The Popcorn Feed", objective:"Feed each other popcorn for the first 10 minutes without looking at each other. Eyes on screen the entire time.", players:"Both", points:30, emoji:"🍿", vibe:"intimate" },
+              { id:"cq3", name:"React Out Loud", objective:"Whoever reacts the least at the film's most shocking moment wins. No covering mouth. Loser buys post-movie chai.", players:"Both", points:40, emoji:"😱", vibe:"chaotic" },
+              { id:"cq4", name:"The Genre Pitch", objective:"Before the film starts, each of you pitches what genre you think the movie secretly is. Revisit after. Most accurate wins.", players:"Both", points:20, emoji:"🎭", vibe:"brainrot" }
+            ],
+            "Flat": [
+              { id:"fq1", name:"The Wikipedia Race", objective:"Both start at the same Wikipedia article. Race to reach a pre-agreed target article in the fewest clicks. Screenshare for proof.", players:"Both", points:50, emoji:"🌐", vibe:"chaotic" },
+              { id:"fq2", name:"The Clothing Trade", objective:"Rock-paper-scissors winner swaps one item of clothing with the other. Loser wears the swapped item for the rest of the night.", players:"Both", points:40, emoji:"👕", vibe:"chaotic" },
+              { id:"fq3", name:"Never Have I Ever Extreme", objective:"Each person gets 3 veto cards. Use one and you owe 10 pushups. Last one with veto cards unused wins the round.", players:"Both", points:60, emoji:"🃏", vibe:"chaotic" },
+              { id:"fq4", name:"The 10 Minute Silence", objective:"Find a quiet spot. Sit together. Hold hands for exactly 10 minutes without saying a single word. First to speak loses.", players:"Both", points:20, emoji:"🤫", vibe:"intimate" },
+              { id:"fq5", name:"The Roast Round", objective:"Each person gets 2 minutes to roast the other as brutally (but lovingly) as possible. Third party or audience votes for winner.", players:"Both", points:60, emoji:"🔥", vibe:"chaotic" },
+              { id:"fq6", name:"Blind Art Collab", objective:"Both draw the same subject with non-dominant hands, eyes closed, for 60 seconds simultaneously. Compare and judge.", players:"Both", points:30, emoji:"🎨", vibe:"childish" },
+              { id:"fq7", name:"The Fake Bio", objective:"Each person writes a wildly inaccurate Wikipedia-style biography for the other. Read it in full documentary narrator voice.", players:"Both", points:50, emoji:"📝", vibe:"brainrot" },
+              { id:"fq8", name:"Screen Time Dare", objective:"Both reveal your screen time stats for the week. Whoever has more screen time does 20 jumping jacks. No arguing the methodology.", players:"Both", points:30, emoji:"📱", vibe:"chaotic" },
+              { id:"fq9", name:"The Letter Exchange", objective:"Both write a letter to each other's future self — one year from today. Seal them. Exchange. The rule: don't open until next year.", players:"Both", points:10, emoji:"✉️", vibe:"intimate" },
+              { id:"fq10", name:"Voice Note Bomb", objective:"Both simultaneously send the same mutual contact a voice note saying 'I need to tell you something important' and go completely silent.", players:"Both", points:70, emoji:"🎙️", vibe:"chaotic" },
+              { id:"fq11", name:"The Childhood Photo Dare", objective:"Both post the most embarrassing childhood photo from your gallery as your WhatsApp status for exactly 1 hour. No cropping allowed.", players:"Both", points:80, emoji:"👶", vibe:"chaotic" },
+              { id:"fq12", name:"Chocolate Body Art", objective:"Using chocolate syrup or melted chocolate, each person draws something on the other's hand or arm. Lick it off before it dries.", players:"Both", points:60, emoji:"🍫", vibe:"intimate" },
+              { id:"fq13", name:"The Memory Game", objective:"Both take turns listing shared memories in chronological order. First person who can't remember one, can't name one, or repeats one loses.", players:"Both", points:20, emoji:"🧠", vibe:"wholesome" },
+              { id:"fq14", name:"The Blindfold Taste Test", objective:"One person is blindfolded. The other feeds them 5 different snacks from the kitchen. They must guess each one. Switch after.", players:"Both", points:40, emoji:"😵", vibe:"childish" }
+            ],
+            "Explore": [
+              { id:"eq1", name:"The Mystery Portrait", objective:"Draw a (bad) portrait of a random stranger on paper. Hand it to them with a straight face. Say nothing at all. Walk away calmly.", players:"Both", points:80, emoji:"🖼️", vibe:"brave" },
+              { id:"eq2", name:"The Random Stop", objective:"Get on any bus or local train. Get off at a completely random stop you've never been to. Walk around for 15 minutes. Take one photo.", players:"Both", points:60, emoji:"🚌", vibe:"chaotic" },
+              { id:"eq3", name:"The Fake Proposal Audience", objective:"One person pretends to propose to the other in public. Hold for 10 seconds. Gauge the crowd. Bonus 20 points if anyone claps.", players:"Both", points:100, emoji:"💍", vibe:"chaotic" },
+              { id:"eq4", name:"5 Facts You Don't Know", objective:"During any walk or transit, both must each share 5 genuine facts about themselves that the other person doesn't know. Verify nothing.", players:"Both", points:20, emoji:"💡", vibe:"intimate" },
+              { id:"eq5", name:"The Alley Discovery", objective:"Find the narrowest alley or lane in your current area and walk through it. Document the weirdest thing you find inside.", players:"Both", points:40, emoji:"🏚️", vibe:"chaotic" },
+              { id:"eq6", name:"The Street Art Hunt", objective:"Find at least 3 pieces of street art, graffiti, or murals near you. Photograph each one. Rate them together out of 10.", players:"Both", points:30, emoji:"🎨", vibe:"wholesome" },
+              { id:"eq7", name:"The Oldest Thing", objective:"Both agree: what is the oldest thing in your current line of sight? Debate it. Find something older. Keep going for 5 minutes.", players:"Both", points:20, emoji:"🏛️", vibe:"wholesome" }
+            ],
+            "Personal": [
+              { id:"pq1", name:"Hold Hands Silence", objective:"Find a quiet or semi-secluded spot. Hold hands for exactly 10 minutes without saying a single word. First to speak loses.", players:"Both", points:20, emoji:"🤝", vibe:"intimate" },
+              { id:"pq2", name:"Say It Out Loud", objective:"Both take turns saying 3 things you genuinely appreciate about the other person. No jokes. No deflecting. Be specific.", players:"Both", points:20, emoji:"💛", vibe:"wholesome" },
+              { id:"pq3", name:"The Honest Question", objective:"Each person must ask the other one thing they've always wanted to know but never dared to ask. Both must answer honestly.", players:"Both", points:30, emoji:"❓", vibe:"intimate" },
+              { id:"pq4", name:"Describe Today in 6 Words", objective:"Both describe the day so far in exactly 6 words. Read them simultaneously. The other person reacts for 30 seconds, no interruptions.", players:"Both", points:20, emoji:"📖", vibe:"wholesome" },
+              { id:"pq5", name:"The Time Capsule Photo", objective:"Take one photo of exactly where you are right now. Lock it in a hidden folder together. Both agree not to look for 1 year.", players:"Both", points:10, emoji:"📸", vibe:"wholesome" },
+              { id:"pq6", name:"The Sincere I Love You", objective:"Both call a parent or sibling and genuinely say 'I love you' before hanging up. Whoever sounds least awkward wins.", players:"Both", points:30, emoji:"❤️", vibe:"wholesome" },
+              { id:"pq7", name:"The No-Phone Hour", objective:"Both phones go face-down. One full hour. No checking. Talk, walk, or sit. Just be present. First to check their phone loses badly.", players:"Both", points:40, emoji:"📵", vibe:"intimate" },
+              { id:"pq8", name:"The Playlist Exchange", objective:"Each person shares the 3 songs that most describe how they feel right now. Play each one. No skipping. Listen fully.", players:"Both", points:20, emoji:"🎵", vibe:"intimate" },
+              { id:"pq9", name:"Write About Each Other", objective:"Both write one paragraph about the other person — their most underrated quality. Read it out loud. No editing after you start reading.", players:"Both", points:30, emoji:"✍️", vibe:"wholesome" }
+            ],
+            "Other": [
+              { id:"xq1", name:"The Loudest Laugh", objective:"Both take turns doing your most ridiculous fake laugh for 10 seconds in a public area. Bystanders vote for the most unhinged one.", players:"Both", points:40, emoji:"😂", vibe:"chaotic" },
+              { id:"xq2", name:"The Happy Birthday Call", objective:"Call a random contact and sing the full Happy Birthday song to them. It doesn't matter if it's their birthday. Hang up after the song ends.", players:"Both", points:60, emoji:"🎂", vibe:"chaotic" },
+              { id:"xq3", name:"The Elevator Pitch", objective:"Both pitch a completely made-up startup to each other in 60 seconds. The other plays a ruthless VC investor. Most convincing pitch wins.", players:"Both", points:40, emoji:"💰", vibe:"brainrot" },
+              { id:"xq4", name:"The Secret Handshake", objective:"Invent a full custom secret handshake on the spot with a random stranger. They must agree to remember it. Document the whole process.", players:"Both", points:90, emoji:"🤝", vibe:"brave" },
+              { id:"xq5", name:"The Alien Walk", objective:"Both walk through a public space as if you've never seen a footpath before. Marvel at everything. Narrate quietly to each other.", players:"Both", points:60, emoji:"👽", vibe:"brainrot" },
+              { id:"xq6", name:"The Relationship Advice Expert", objective:"Approach a couple and ask for serious relationship advice about 'a complicated situation with your pet goldfish.' Be completely earnest.", players:"One", points:90, emoji:"🐟", vibe:"chaotic" },
+              { id:"xq7", name:"The One Star Review", objective:"Pick something perfectly ordinary — a bench, a tree, the air — and deliver a furious 1-star review of it out loud like a TripAdvisor Karen.", players:"Both", points:40, emoji:"⭐", vibe:"brainrot" },
+              { id:"xq8", name:"Buy Chocolate Eat Like a Child", objective:"Buy any chocolate bar. Both eat it with the maximum childish joy possible — licking wrappers, making 'mmm' sounds, offering some to strangers.", players:"Both", points:30, emoji:"🍫", vibe:"childish" },
+              { id:"xq9", name:"The Accent Journey", objective:"For the entire duration of any auto or cab ride, both must speak only in a mutually agreed-upon fake accent. Absolutely no breaking.", players:"Both", points:50, emoji:"🗣️", vibe:"brainrot" },
+              { id:"xq10", name:"The Shakespeare Monologue", objective:"Stand in a public area. Deliver a passionate 60-second monologue about your love for a specific food. Full theatrical projection.", players:"One", points:80, emoji:"🎭", vibe:"chaotic" },
+              { id:"xq11", name:"The Superlative Drop", objective:"Write absurd award titles on paper. ('Best Hair in the Southern Hemisphere'). Hand them to strangers and walk away without explanation.", players:"Both", points:80, emoji:"🏅", vibe:"brave" },
+              { id:"xq12", name:"The Fake Breakup Call", objective:"One person pretends to be on a dramatic breakup phone call in public for 2 full minutes. The other person rates the performance out of 10.", players:"One", points:70, emoji:"😭", vibe:"chaotic" },
+              { id:"xq13", name:"Recreate a Childhood Photo", objective:"Find or recall a childhood photo from memory. Recreate it as accurately as possible with your current surroundings. Compare side-by-side.", players:"Both", points:50, emoji:"👶", vibe:"wholesome" },
+              { id:"xq14", name:"The DJ Dedication", objective:"Call a radio station or approach someone playing music publicly and request a song dedication for 'my best friend who came all the way from another city'.", players:"Both", points:70, emoji:"📻", vibe:"wholesome" }
+            ]
+        };
+
+        // ═══════════════════════════════════════
+        // e. ALPINE COMPONENT
+        // ═══════════════════════════════════════
+        document.addEventListener('alpine:init', () => {
+            Alpine.data('arcadeApp', () => ({
+
+                // ── State ──
+                showSplash: !sessionStorage.getItem('arcade_started'),
+                activeVibe: 'all',
+                duel: {
+                    active: false,
+                    round: 1,
+                    p1Choice: null,
+                    p2Choice: null,
+                    revealed: false,
+                    scores: { p1: 0, p2: 0 },
+                    result: '',
+                    done: false,
+                    winner: ''
+                },
+                activeTab: 'places',
+                places: [],
+                dayPlan: [],
+                currentQuest: null,
+                spinDisplayQuest: null,
+                questStatus: 'idle',
+                isSpinning: false,
+                showAchievement: false,
+                achievementText: '',
+                players: {
+                    p1: { name: 'BENSTON', score: 0, questsCompleted: 0 },
+                    p2: { name: 'POOJA', score: 0, questsCompleted: 0 }
+                },
+                questWinner: null,
+                showWinnerSelection: false,
+                customQuests: [],
+                showAddQuest: false,
+                newQuestForm: { name: '', objective: '', category: 'Other', points: 50, emoji: '🎯', vibe: 'chaotic' },
+                questHistory: [],
+                newPlaceForm: { title: '', category: 'Outdoor', time: '', desc: '' },
+                showAddPlace: false,
+                filterCategory: 'All',
+                lastCompletedQuest: null,
+
+                // ── Init ──
+                init() {
+                    try {
+                        const savedPlaces = localStorage.getItem('mumbai_places');
+                        this.places = savedPlaces
+                            ? JSON.parse(savedPlaces)
+                            : JSON.parse(JSON.stringify(PLACES_DATA));
+                    } catch (e) {
+                        this.places = JSON.parse(JSON.stringify(PLACES_DATA));
+                    }
+
+                    try {
+                        const savedPlayers = localStorage.getItem('mumbai_players');
+                        if (savedPlayers) {
+                            const parsed = JSON.parse(savedPlayers);
+                            if (parsed.p1) {
+                                if (parsed.p1.questsCompleted === undefined) parsed.p1.questsCompleted = 0;
+                                if (parsed.p1.name === 'PLAYER 1') parsed.p1.name = 'BENSTON';
+                            } else {
+                                parsed.p1 = { name: 'BENSTON', score: 0, questsCompleted: 0 };
+                            }
+                            if (parsed.p2) {
+                                if (parsed.p2.questsCompleted === undefined) parsed.p2.questsCompleted = 0;
+                                if (parsed.p2.name === 'PLAYER 2') parsed.p2.name = 'POOJA';
+                            } else {
+                                parsed.p2 = { name: 'POOJA', score: 0, questsCompleted: 0 };
+                            }
+                            this.players = parsed;
+                        } else {
+                            this.players = {
+                                p1: { name: 'BENSTON', score: 0, questsCompleted: 0 },
+                                p2: { name: 'POOJA', score: 0, questsCompleted: 0 }
+                            };
+                        }
+                    } catch (e) {
+                        this.players = {
+                            p1: { name: 'BENSTON', score: 0, questsCompleted: 0 },
+                            p2: { name: 'POOJA', score: 0, questsCompleted: 0 }
+                        };
+                    }
+
+                    try {
+                        const savedCustomQuests = localStorage.getItem('mumbai_custom_quests');
+                        this.customQuests = savedCustomQuests ? JSON.parse(savedCustomQuests) : [];
+                    } catch (e) {
+                        this.customQuests = [];
+                    }
+
+                    try {
+                        const savedHistory = localStorage.getItem('mumbai_history');
+                        this.questHistory = savedHistory ? JSON.parse(savedHistory) : [];
+                    } catch (e) {
+                        this.questHistory = [];
+                    }
+
+                    try {
+                        const savedDayPlan = localStorage.getItem('mumbai_dayplan');
+                        this.dayPlan = savedDayPlan ? JSON.parse(savedDayPlan) : [];
+                    } catch (e) {
+                        this.dayPlan = [];
+                    }
+
+                    // SortableJS — init after DOM renders
+                    this.$nextTick(() => {
+                        const el = document.getElementById('day-plan-list');
+                        if (el) {
+                            const self = this;
+                            Sortable.create(el, {
+                                animation: 150,
+                                ghostClass: 'opacity-50',
+                                handle: '.drag-handle',
+                                onEnd(evt) {
+                                    const moved = self.dayPlan.splice(evt.oldIndex, 1)[0];
+                                    self.dayPlan.splice(evt.newIndex, 0, moved);
+                                    self.saveDayPlan();
+                                }
+                            });
+                        }
+                    });
+                },
+
+                // ── Persistence ──
+                savePlaces()  { localStorage.setItem('mumbai_places',  JSON.stringify(this.places)); },
+                savePlayers() { localStorage.setItem('mumbai_players', JSON.stringify(this.players)); },
+                saveHistory() { localStorage.setItem('mumbai_history', JSON.stringify(this.questHistory)); },
+                saveDayPlan() { localStorage.setItem('mumbai_dayplan', JSON.stringify(this.dayPlan)); },
+
+                // ── Places ──
+                addPlace() {
+                    if (!this.newPlaceForm.title.trim()) return;
+                    const maxId = this.places.reduce((max, p) => Math.max(max, p.id), 0);
+                    this.places.push({
+                        id: maxId + 1,
+                        title: this.newPlaceForm.title.trim(),
+                        category: this.newPlaceForm.category,
+                        time: this.newPlaceForm.time || 'Anytime',
+                        desc: this.newPlaceForm.desc || '',
+                        type: 'custom'
+                    });
+                    this.savePlaces();
+                    this.newPlaceForm = { title: '', category: 'Outdoor', time: '', desc: '' };
+                    this.showAddPlace = false;
+                },
+
+                removePlace(id) {
+                    this.places = this.places.filter(p => p.id !== id);
+                    this.dayPlan = this.dayPlan.filter(pid => pid !== id);
+                    this.savePlaces();
+                    this.saveDayPlan();
+                },
+
+                toggleDayPlan(placeId) {
+                    const idx = this.dayPlan.indexOf(placeId);
+                    if (idx > -1) { this.dayPlan.splice(idx, 1); }
+                    else           { this.dayPlan.push(placeId); }
+                    this.saveDayPlan();
+                },
+
+                isInDayPlan(placeId) { return this.dayPlan.includes(placeId); },
+
+                getPlaceById(id) { return this.places.find(p => p.id === id); },
+
+                // ── Quest Engine ──
+                getActiveCategoryQuests() {
+                    let categories = new Set();
+                    if (this.dayPlan.length > 0) {
+                        this.dayPlan.forEach(pid => {
+                            const place = this.getPlaceById(pid);
+                            if (place) categories.add(place.category);
+                        });
+                        categories.add('Other');
+                    } else {
+                        Object.keys(SIDE_QUESTS).forEach(cat => categories.add(cat));
+                    }
+                    let builtIn = [];
+                    const seen = new Set();
+                    categories.forEach(cat => {
+                        if (SIDE_QUESTS[cat]) {
+                            SIDE_QUESTS[cat].forEach(q => {
+                                if (!seen.has(q.id)) {
+                                    seen.add(q.id);
+                                    builtIn.push({ ...q, category: cat });
+                                }
+                            });
+                        }
+                    });
+                    const activeCategories = Array.from(categories);
+                    const custom = this.customQuests.filter(q =>
+                        activeCategories.includes(q.category) || q.category === 'Other' || activeCategories.length === 0
+                    );
+                    let combined = [...builtIn, ...custom];
+
+                    // Filter by active vibe if not 'all' (Feature 2)
+                    if (this.activeVibe !== 'all') {
+                        combined = combined.filter(q => q.vibe === this.activeVibe);
+                    }
+                    return combined;
+                },
+
+                spinQuest(fromAll) {
+                    let pool;
+                    if (fromAll) {
+                        pool = [];
+                        Object.keys(SIDE_QUESTS).forEach(cat => {
+                            SIDE_QUESTS[cat].forEach(q => pool.push({ ...q, category: cat }));
+                        });
+                        this.customQuests.forEach(q => pool.push({ ...q }));
+                        // Filter by active vibe if not 'all' (Feature 2)
+                        if (this.activeVibe !== 'all') {
+                            pool = pool.filter(q => q.vibe === this.activeVibe);
+                        }
+                    } else {
+                        pool = this.getActiveCategoryQuests();
+                    }
+                    if (pool.length === 0) {
+                        alert("NO QUESTS MATCH THE CURRENT VIBE / CATEGORY SELECTION!");
+                        return;
+                    }
+
+                    this.isSpinning = true;
+                    this.questStatus = 'spinning';
+                    this.currentQuest = null;
+                    this.spinDisplayQuest = null;
+                    this.showWinnerSelection = false;
+
+                    let flashCount = 0;
+                    const totalFlashes = 10;
+                    const interval = setInterval(() => {
+                        this.spinDisplayQuest = { ...pool[Math.floor(Math.random() * pool.length)] };
+                        flashCount++;
+                        if (flashCount >= totalFlashes) {
+                            clearInterval(interval);
+                            this.currentQuest = { ...pool[Math.floor(Math.random() * pool.length)] };
+                            this.spinDisplayQuest = null;
+                            this.questStatus = 'active';
+                            this.isSpinning = false;
+                            this.$nextTick(() => {
+                                document.getElementById('quest-result-card')?.scrollIntoView({ behavior: 'smooth' });
+                            });
+                        }
+                    }, 150);
+                },
+
+                awardAndComplete(winner) {
+                    const pts = this.currentQuest.points;
+                    this.questWinner = winner;
+                    if (winner === 'p1' || winner === 'both') {
+                        this.players.p1.score += pts;
+                        this.players.p1.questsCompleted++;
+                    }
+                    if (winner === 'p2' || winner === 'both') {
+                        this.players.p2.score += pts;
+                        this.players.p2.questsCompleted++;
+                    }
+                    this.questHistory.push({
+                        ...this.currentQuest,
+                        winner,
+                        timestamp: new Date().toISOString(),
+                        completedAt: new Date().toISOString(),
+                        pointsAwarded: pts
+                    });
+                    this.savePlayers();
+                    this.saveHistory();
+                    this.lastCompletedQuest = { ...this.currentQuest, pointsAwarded: pts, winner };
+                    this.questStatus = 'done';
+
+                    this.achievementText = winner === 'both'
+                        ? `BOTH CRUSHED IT! +${pts} PTS EACH`
+                        : `${winner === 'p1' ? this.players.p1.name : this.players.p2.name} WINS! +${pts} PTS`;
+
+                    this.showAchievement = true;
+                    setTimeout(() => { this.showAchievement = false; }, 3000);
+                },
+
+                addCustomQuest() {
+                    if (!this.newQuestForm.name || !this.newQuestForm.objective) return;
+                    const quest = {
+                        ...this.newQuestForm,
+                        id: 'custom_' + Date.now(),
+                        players: 'Both',
+                        custom: true
+                    };
+                    this.customQuests.push(quest);
+                    localStorage.setItem('mumbai_custom_quests', JSON.stringify(this.customQuests));
+                    this.showAddQuest = false;
+                    this.newQuestForm = { name: '', objective: '', category: 'Other', points: 50, emoji: '🎯', vibe: 'chaotic' };
+                },
+
+                removeCustomQuest(id) {
+                    this.customQuests = this.customQuests.filter(q => q.id !== id);
+                    localStorage.setItem('mumbai_custom_quests', JSON.stringify(this.customQuests));
+                },
+
+                skipQuest() {
+                    this.currentQuest = null;
+                    this.questStatus = 'idle';
+                    this.showWinnerSelection = false;
+                },
+
+                // ── Welcome Splash Screen (Feature 1) ──
+                startGame() {
+                    sessionStorage.setItem('arcade_started', '1');
+                    this.showSplash = false;
+                },
+
+                // ── Header Quick Spin (Feature 5) ──
+                quickSpin() {
+                    this.spinQuest(true);
+                    this.activeTab = 'quests';
+                },
+
+                // ── Rock Paper Scissors Quick Duel (Feature 3) ──
+                startDuel() {
+                    this.duel = {
+                        active: true,
+                        round: 1,
+                        p1Choice: null,
+                        p2Choice: null,
+                        revealed: false,
+                        scores: { p1: 0, p2: 0 },
+                        result: '',
+                        done: false,
+                        winner: ''
+                    };
+                },
+
+                chooseDuel(player, choice) {
+                    if (this.duel.revealed) return;
+                    if (player === 'p1') {
+                        this.duel.p1Choice = choice;
+                    } else if (player === 'p2') {
+                        this.duel.p2Choice = choice;
+                    }
+                },
+
+                revealDuelRound() {
+                    const p1 = this.duel.p1Choice;
+                    const p2 = this.duel.p2Choice;
+                    if (!p1 || !p2) return;
+
+                    this.duel.revealed = true;
+
+                    if (p1 === p2) {
+                        this.duel.result = "ROUND TIE! REPLAY ROUND!";
+                    } else if (
+                        (p1 === '✊' && p2 === '✌️') ||
+                        (p1 === '✋' && p2 === '✊') ||
+                        (p1 === '✌️' && p2 === '✋')
+                    ) {
+                        this.duel.scores.p1++;
+                        this.duel.result = `${this.players.p1.name} WINS ROUND ${this.duel.round}!`;
+                    } else {
+                        this.duel.scores.p2++;
+                        this.duel.result = `${this.players.p2.name} WINS ROUND ${this.duel.round}!`;
+                    }
+
+                    // Check if overall duel is done (first to 2 wins)
+                    if (this.duel.scores.p1 === 2) {
+                        this.duel.done = true;
+                        this.duel.winner = 'p1';
+                    } else if (this.duel.scores.p2 === 2) {
+                        this.duel.done = true;
+                        this.duel.winner = 'p2';
+                    }
+                },
+
+                advanceDuel() {
+                    if (this.duel.done) {
+                        // Duel is complete, award points!
+                        const winnerKey = this.duel.winner;
+                        const winnerName = this.players[winnerKey].name;
+                        this.players[winnerKey].score += 15;
+                        this.savePlayers();
+
+                        this.achievementText = `⚔️ DUEL CHAMPION: ${winnerName} (+15 PTS)`;
+                        this.showAchievement = true;
+                        setTimeout(() => { this.showAchievement = false; }, 3000);
+
+                        this.duel.active = false;
+                    } else {
+                        // Move to next round / replay
+                        if (this.duel.result.includes("TIE")) {
+                            // Replay current round
+                            this.duel.p1Choice = null;
+                            this.duel.p2Choice = null;
+                            this.duel.revealed = false;
+                            this.duel.result = '';
+                        } else {
+                            // Advance to next round
+                            this.duel.round++;
+                            this.duel.p1Choice = null;
+                            this.duel.p2Choice = null;
+                            this.duel.revealed = false;
+                            this.duel.result = '';
+                        }
+                    }
+                },
+
+                // ── Scoreboard ──
+                resetScores() {
+                    if (confirm('RESET ALL SCORES TO ZERO?')) {
+                        this.players.p1.score = 0;
+                        this.players.p1.questsCompleted = 0;
+                        this.players.p2.score = 0;
+                        this.players.p2.questsCompleted = 0;
+                        this.savePlayers();
+                    }
+                },
+
+                clearHistory() {
+                    if (confirm('CLEAR ENTIRE QUEST LOG?')) {
+                        this.questHistory = [];
+                        this.saveHistory();
+                    }
+                },
+
+                // ── Computed ──
+                get filteredPlaces() {
+                    if (this.filterCategory === 'All') return this.places;
+                    return this.places.filter(p => p.category === this.filterCategory);
+                },
+
+                get totalQuestsCompleted() { return this.questHistory.length; },
+
+                get totalScore() { return this.players.p1.score + this.players.p2.score; },
+
+                get allCategories() {
+                    const cats = new Set(this.places.map(p => p.category));
+                    return ['All', ...Array.from(cats).sort()];
+                },
+
+                get topCategory() {
+                    if (this.questHistory.length === 0) return null;
+                    const counts = {};
+                    this.questHistory.forEach(q => {
+                        const cat = q.category || 'Other';
+                        counts[cat] = (counts[cat] || 0) + 1;
+                    });
+                    let maxCat = null, maxCount = 0;
+                    Object.keys(counts).forEach(cat => {
+                        if (counts[cat] > maxCount) { maxCount = counts[cat]; maxCat = cat; }
+                    });
+                    return maxCat;
+                }
+            }));
+        });
+    </script>
+</body>
+</html>
